@@ -5,7 +5,7 @@
  * Stack: Node.js + Express + MongoDB
  * API: Twilio WhatsApp
  *
- * Configuración: Ver .env.example
+ * Configuración: variables de entorno (ver README)
  */
 
 require('dotenv').config();
@@ -29,8 +29,9 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'; // Cambiar en p
 const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
 // ========== DATABASE SCHEMAS ==========
-mongoose.connect(MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .catch(err => console.error('MongoDB error:', err));
+mongoose.connect(MONGODB_URI)
+  .then(() => console.log('✅ MongoDB conectado'))
+  .catch(err => console.error('❌ MongoDB error:', err));
 
 // Usuario/Artista
 const userSchema = new mongoose.Schema({
