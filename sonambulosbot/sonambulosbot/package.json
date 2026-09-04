@@ -1,0 +1,29 @@
+{
+  "name": "sonambulosbot",
+  "version": "1.0.0",
+  "description": "WhatsApp Bot para eventos - Sistema de monedas Sonámbulos",
+  "main": "sonambulosbot-backend.js",
+  "scripts": {
+    "start": "node sonambulosbot-backend.js",
+    "dev": "nodemon sonambulosbot-backend.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "monedas",
+    "eventos"
+  ],
+  "author": "Sonámbulos Team",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "mongoose": "^7.0.0",
+    "twilio": "^3.87.0",
+    "dotenv": "^16.0.3",
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  }
+}
