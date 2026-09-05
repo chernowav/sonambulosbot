@@ -92,6 +92,7 @@ const Transaction = mongoose.model('Transaction', transactionSchema);
 
 async function getOrCreateUser(phoneNumber, name = null) {
   let user = await User.findOne({ phoneNumber });
+  if (!user) user = await User.findOne({ phoneNumber: new RegExp(String(phoneNumber).replace(/\D/g, '').slice(-10) + '$') });
   if (!user) {
     user = new User({ phoneNumber, name: name || `Usuario ${phoneNumber.slice(-4)}` });
     await user.save();
@@ -132,6 +133,7 @@ function generateCoinId() {
 // ========== BOT COMMANDS ==========
 
 const commands = {
+  send: async (phoneNumber, args) => { const target = args.find(a => a.startsWith('@')) || args.find(a => /^\d{7,}$/.test(a)); if (!target) return '❌ Formato: /send 5 tokens to @numero'; const amt = args.find(a => a !== target && /^\d{1,6}$/.test(a)); return commands.transfer(phoneNumber, [target, amt || '1']); },
   // Usuario normal: ver saldo
   balance: async (phoneNumber) => {
     const user = await User.findOne({ phoneNumber });
@@ -278,6 +280,7 @@ const commands = {
     msg += '/register [nombre] — Registrarte\n';
     msg += '/balance — Ver tu saldo\n';
     msg += '/transfer @usuario X — Enviar X monedas\n';
+    msg += '/send X tokens to @numero — Enviar X (1 si omites X)\n';
     msg += '/history — Últimas transacciones\n';
 
     if (isAdmin) {
@@ -287,6 +290,9 @@ const commands = {
     }
 
     return msg;
+
+    msg += '/send X tokens to @numero — Enviar X (o 1 si omites X)\n';
+
   }
 };
 
