@@ -308,7 +308,7 @@ app.post('/webhook/message', async (req, res) => {
   }
 
   const incoming = message.trim().toLowerCase();
-  const phoneNumber = phone;
+  const phoneNumber = String(phone || '').replace(/\D/g,'').slice(-10);
 
   console.log(`📨 Mensaje de ${phoneNumber}: ${incoming}`);
 
@@ -344,7 +344,7 @@ app.post('/webhook/message', async (req, res) => {
 app.post('/webhook/sms', async (req, res) => {
   // Soporta formato Twilio o JSON simple
   const incoming = (req.body.Body || req.body.message || '')?.trim().toLowerCase();
-  const phoneNumber = req.body.From || req.body.phone;
+  const phoneNumber = String(req.body.From || req.body.phone || '').replace(/\D/g,'').slice(-10);
 
   if (!incoming || !phoneNumber) {
     return res.status(400).json({ error: 'Mensaje o teléfono inválido' });
