@@ -1,17 +1,16 @@
 /**
- * SONÁMBULOS — WhatsApp Bot Backend
+ * SONÁMBULOS — SMS Bot Backend
  * Sistema de monedas para eventos
  *
  * Stack: Node.js + Express + MongoDB
- * API: Twilio WhatsApp
+ * API: HTTP + Webhook para SMS (Twilio/Bandwidth)
  *
- * Configuración: variables de entorno (ver README)
+ * Configuración: Ver .env.example
  */
 
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
-const twilio = require('twilio');
 const crypto = require('crypto');
 
 const app = express();
@@ -19,19 +18,15 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 // ========== CONFIG ==========
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER; // wh sandbox o verified
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://user:pass@cluster.mongodb.net/sonambulosbot';
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'; // Cambiar en producción
-
-const client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+const BASE_URL = process.env.BASE_URL || 'https://sonambulosbot-production.up.railway.app';
 
 // ========== DATABASE SCHEMAS ==========
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ MongoDB conectado'))
-  .catch(err => console.error('❌ MongoDB error:', err));
+  .catch(err => console.error('❌ MongoDB error:', err.message));
 
 // Usuario/Artista
 const userSchema = new mongoose.Schema({
@@ -102,18 +97,11 @@ async function getOrCreateUser(phoneNumber, name = null) {
   return user;
 }
 
-async function sendWhatsAppMessage(phoneNumber, message) {
-  try {
-    const msg = await client.messages.create({
-      body: message,
-      from: TWILIO_WHATSAPP_NUMBER,
-      to: `whatsapp:${phoneNumber}`
-    });
-    return msg.sid;
-  } catch (error) {
-    console.error('WhatsApp error:', error);
-    return null;
-  }
+async function sendMessage(phoneNumber, message) {
+  // Log message para testing sin SMS real
+  console.log(`📱 Enviando a ${phoneNumber}: ${message}`);
+  // En producción, esto se reemplazará con Twilio/Bandwidth/etc
+  return `msg_${crypto.randomUUID()}`;
 }
 
 async function logTransaction(from, to, coinIds, action, description, eventId) {
@@ -302,9 +290,15 @@ const commands = {
 
 // ========== MAIN WEBHOOK ==========
 
-app.post('/webhook/whatsapp', async (req, res) => {
-  const incoming = req.body.Body?.trim().toLowerCase();
-  const phoneNumber = req.body.From?.replace('whatsapp:', '');
+app.post('/webhook/message', async (req, res) => {
+  const { phone, message } = req.body;
+
+  if (!phone || !message) {
+    return res.status(400).json({ error: 'phone y message son requeridos' });
+  }
+
+  const incoming = message.trim().toLowerCase();
+  const phoneNumber = phone;
 
   console.log(`📨 Mensaje de ${phoneNumber}: ${incoming}`);
 
@@ -324,23 +318,79 @@ app.post('/webhook/whatsapp', async (req, res) => {
     }
   }
 
-  // Enviar respuesta privada
-  await sendWhatsAppMessage(phoneNumber, response);
+  // Enviar respuesta (log en testing)
+  await sendMessage(phoneNumber, response);
 
-  // Twilio requiere TwiML
-  const twiml = new twilio.twiml.MessagingResponse();
-  twiml.message('Mensaje recibido ✅');
-
-  res.type('text/xml').send(twiml.toString());
+  res.json({
+    success: true,
+    phoneNumber,
+    command,
+    response
+  });
 });
 
-// ========== STATUS ==========
+// ========== WEBHOOK SMS (Twilio/Bandwidth compatible) ==========
+
+app.post('/webhook/sms', async (req, res) => {
+  // Soporta formato Twilio o JSON simple
+  const incoming = (req.body.Body || req.body.message || '')?.trim().toLowerCase();
+  const phoneNumber = req.body.From || req.body.phone;
+
+  if (!incoming || !phoneNumber) {
+    return res.status(400).json({ error: 'Mensaje o teléfono inválido' });
+  }
+
+  console.log(`📨 SMS de ${phoneNumber}: ${incoming}`);
+
+  // Parse comando
+  const parts = incoming.split(/\s+/);
+  const command = parts[0].replace('/', '');
+  const args = parts.slice(1);
+
+  let response = '❌ Comando no reconocido. Usa /help';
+
+  if (commands[command]) {
+    try {
+      response = await commands[command](phoneNumber, args);
+    } catch (error) {
+      console.error('Error:', error);
+      response = '❌ Error procesando comando. Intenta de nuevo.';
+    }
+  }
+
+  // Enviar respuesta
+  await sendMessage(phoneNumber, response);
+
+  // Responder en JSON (más simple que TwiML)
+  res.json({
+    success: true,
+    phoneNumber,
+    command,
+    response,
+    timestamp: new Date()
+  });
+});
+
+// ========== STATUS & TESTING ==========
 
 app.get('/', (req, res) => {
   res.json({
-    status: 'Sonámbulos Bot running',
+    status: '✅ Sonámbulos Bot running',
     email: 'sonambulosctg@gmail.com',
-    version: '1.0.0-beta'
+    version: '1.0.0-beta',
+    endpoints: {
+      'POST /webhook/sms': 'Recibe SMS (Twilio/Bandwidth compatible)',
+      'POST /webhook/message': 'Recibe mensaje JSON simple',
+      'GET /test': 'Test rápido'
+    }
+  });
+});
+
+app.get('/test', (req, res) => {
+  res.json({
+    message: 'Bot funcionando correctamente',
+    instructions: 'Envía POST a /webhook/sms con: { "phone": "+5713xxx", "message": "/help" }',
+    example_curl: 'curl -X POST https://sonambulosbot-production.up.railway.app/webhook/sms -H "Content-Type: application/json" -d \'{"phone": "+5713xxx", "message": "/register test"}\''
   });
 });
 
