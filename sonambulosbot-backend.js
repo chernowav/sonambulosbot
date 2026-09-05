@@ -424,5 +424,6 @@ app.listen(PORT, () => {
   console.log(`🚀 Sonámbulos Bot running on port ${PORT}`);
   console.log(`📧 Email: sonambulosctg@gmail.com`);
 });
+// Forced redeploy - 2026-09-05 Deploy verification loop trigger
 
 module.exports = app;
