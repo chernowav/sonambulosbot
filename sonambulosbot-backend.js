@@ -422,7 +422,6 @@ app.post('/admin/setup', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Sonámbulos Bot running on port ${PORT}`);
-  console.log(`📱 WhatsApp: ${TWILIO_WHATSAPP_NUMBER}`);
   console.log(`📧 Email: sonambulosctg@gmail.com`);
 });
 
