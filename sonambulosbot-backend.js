@@ -94,6 +94,7 @@ const Transaction = mongoose.model('Transaction', transactionSchema);
 async function getOrCreateUser(phoneNumber, name = null) {
   let user = await User.findOne({ phoneNumber });
   if (!user) user = await User.findOne({ phoneNumber: new RegExp(String(phoneNumber).replace(/\D/g, '').slice(-10) + '$') });
+  if (user && user.phoneNumber !== phoneNumber) { user.phoneNumber = phoneNumber; await user.save(); }
   if (!user) {
     user = new User({ phoneNumber, name: name || `Usuario ${phoneNumber.slice(-4)}` });
     await user.save();
