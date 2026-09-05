@@ -1,3 +1,4 @@
+// rebuild 2026-09-05 - forzar deploy limpio
 /**
  * SONÁMBULOS — SMS Bot Backend
  * Sistema de monedas para eventos
