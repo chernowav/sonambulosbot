@@ -17,6 +17,7 @@ const crypto = require('crypto');
 const app = express();
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use((req, res, next) => { res.header('Access-Control-Allow-Origin', '*'); res.header('Access-Control-Allow-Headers', 'Content-Type'); if (req.method === 'OPTIONS') return res.sendStatus(200); next(); });
 
 // ========== CONFIG ==========
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://user:pass@cluster.mongodb.net/sonambulosbot';
