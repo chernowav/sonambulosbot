@@ -13,6 +13,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+const twilio = require('twilio');
 
 const app = express();
 app.use(express.urlencoded({ extended: false }));
@@ -25,6 +26,20 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://user:pass@cluster.
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'; // Cambiar en producción
 const BASE_URL = process.env.BASE_URL || 'https://sonambulosbot-production.up.railway.app';
+
+// ========== TWILIO (envío real de SMS) ==========
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER; // número Twilio con capacidad SMS, formato E.164 (+57...)
+const DEFAULT_COUNTRY_CODE = process.env.DEFAULT_COUNTRY_CODE || '+57';
+
+let twilioClient = null;
+if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER) {
+  twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+  console.log('✅ Twilio SMS habilitado');
+} else {
+  console.log('⚠️ Twilio no configurado (falta TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER) — los mensajes solo se registran en el log');
+}
 
 // ========== DATABASE SCHEMAS ==========
 mongoose.connect(MONGODB_URI)
@@ -104,10 +119,27 @@ async function getOrCreateUser(phoneNumber, name = null) {
 }
 
 async function sendMessage(phoneNumber, message) {
-  // Log message para testing sin SMS real
   console.log(`📱 Enviando a ${phoneNumber}: ${message}`);
-  // En producción, esto se reemplazará con Twilio/Bandwidth/etc
-  return `msg_${crypto.randomUUID()}`;
+
+  if (!twilioClient) {
+    // Twilio no configurado — se queda solo en el log (comportamiento anterior)
+    return `msg_${crypto.randomUUID()}`;
+  }
+
+  const digits = String(phoneNumber).replace(/\D/g, '').slice(-10);
+  const to = digits.length === 10 ? `${DEFAULT_COUNTRY_CODE}${digits}` : `+${digits}`;
+
+  try {
+    const msg = await twilioClient.messages.create({
+      body: message,
+      from: TWILIO_PHONE_NUMBER,
+      to
+    });
+    return msg.sid;
+  } catch (error) {
+    console.error('❌ Error enviando SMS por Twilio:', error.message);
+    return null;
+  }
 }
 
 async function logTransaction(from, to, coinIds, action, description, eventId) {
