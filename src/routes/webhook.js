@@ -1,23 +1,18 @@
-const { normalizePhone } = require('../utils/phone');
-
 const ADMIN_LOCKED_COMMANDS = new Set(['emit', 'users', 'content', 'resetpin']);
+
+// Lo único que se puede pedir sin haber iniciado sesión.
+const PUBLIC_COMMANDS = new Set(['help']);
 
 // Handler compartido por /webhook/sms y /webhook/message. Antes cada ruta
 // tenía su propia copia casi idéntica de este código (parseo de comando,
 // chequeo de adminKey, despacho, envío de respuesta); ahora ambas rutas
 // solo difieren en el path que las expone.
-function createWebhookHandler({ commands, config, sendMessage }) {
+function createWebhookHandler({ commands, config, sendMessage, sessions }) {
   return async function handleIncoming(req, res) {
-    const rawBody = req.body.Body ?? req.body.message;
-    const rawPhone = req.body.From ?? req.body.phone;
-    const incoming = (rawBody || '').trim();
-    const phoneNumber = normalizePhone(rawPhone);
-
-    if (!incoming || !phoneNumber) {
-      return res.status(400).json({ error: 'Mensaje o teléfono inválido' });
+    const incoming = (req.body.Body ?? req.body.message ?? '').trim();
+    if (!incoming) {
+      return res.status(400).json({ error: 'Mensaje inválido' });
     }
-
-    console.log(`📨 Mensaje de ${phoneNumber}: ${incoming}`);
 
     // Solo el nombre del comando se compara en minúsculas; los argumentos
     // (nombres, y sobre todo links de /content) mantienen mayúsculas y
@@ -25,6 +20,24 @@ function createWebhookHandler({ commands, config, sendMessage }) {
     const parts = incoming.split(/\s+/);
     const command = parts[0].replace('/', '').toLowerCase();
     const args = parts.slice(1);
+
+    // La identidad sale del token firmado, nunca del teléfono que mande el
+    // cliente. Si saliera del body, cualquiera podría escribir el número de
+    // otra persona y gastarle el saldo.
+    const session = sessions.verify(req.body.token);
+
+    if (!session && !PUBLIC_COMMANDS.has(command)) {
+      return res.json({
+        success: true,
+        command,
+        locked: true,
+        reason: 'auth',
+        response: '🔒 Verifica tu PIN para continuar.',
+      });
+    }
+
+    const phoneNumber = session ? session.phoneNumber : null;
+    console.log(`📨 Mensaje de ${phoneNumber || 'anónimo'}: ${incoming}`);
 
     if (ADMIN_LOCKED_COMMANDS.has(command) && req.body.adminKey !== config.adminPassword) {
       return res.json({
@@ -38,27 +51,14 @@ function createWebhookHandler({ commands, config, sendMessage }) {
     }
 
     let response = '❌ Comando no reconocido. Usa /help';
-    let locked = false;
-    let reason = null;
 
     if (commands[command]) {
       try {
-        const result = await commands[command](phoneNumber, args, { pin: req.body.pin });
-        if (result && typeof result === 'object' && result.locked) {
-          locked = true;
-          reason = result.reason;
-          response = result.response;
-        } else {
-          response = result;
-        }
+        response = await commands[command](phoneNumber, args);
       } catch (error) {
         console.error('Error:', error);
         response = '❌ Error procesando comando. Intenta de nuevo.';
       }
-    }
-
-    if (locked) {
-      return res.json({ success: true, phoneNumber, command, locked: true, reason, response });
     }
 
     await sendMessage(phoneNumber, response);

@@ -2,13 +2,16 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
   phoneNumber: { type: String, unique: true, required: true },
+  // Nombre con el que se le habla a la persona en la consola; no identifica
+  // la cuenta (eso lo hace phoneNumber) y por eso no es único.
   name: String,
+  email: String,
   balance: { type: Number, default: 0 },
   isArtist: { type: Boolean, default: false },
   isAdmin: { type: Boolean, default: false },
-  // Hash del PIN de 4 dígitos que confirma quién transfiere/compra desde la
-  // consola web, donde el teléfono ya no viene verificado por un proveedor
-  // de SMS. Ver src/utils/pin.js.
+  // Hash del PIN que la persona eligió al crear la cuenta. Es la credencial
+  // de inicio de sesión: se verifica una vez al entrar y a partir de ahí vale
+  // el token de sesión. Ver src/utils/pin.js y src/services/sessions.js.
   pinHash: String,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },

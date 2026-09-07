@@ -3,72 +3,330 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Consola Sonambulos</title>
+<title>Sonámbulos</title>
 <style>
 :root{--ink:#131120;--panel:#1D1A2C;--p2:#252137;--line:#2F2B44;--tx:#E9E5F2;--mu:#8983A6;--gold:#CBA135;--err:#D97070;--ok:#6FAE8C}
 *{box-sizing:border-box}
-body{margin:0 auto;max-width:520px;height:100vh;display:flex;flex-direction:column;background:var(--ink);color:var(--tx);font:15px/1.5 system-ui,sans-serif;border-left:1px solid var(--line);border-right:1px solid var(--line)}
-header{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
+/* Sin esto, el display:flex de form y #app le gana al atributo hidden y se
+   ven las dos pantallas encimadas. */
+[hidden]{display:none!important}
+body{margin:0 auto;max-width:520px;min-height:100vh;display:flex;flex-direction:column;background:var(--ink);color:var(--tx);font:15px/1.5 system-ui,sans-serif;border-left:1px solid var(--line);border-right:1px solid var(--line)}
 h1{margin:0;font:400 24px Georgia,serif}
 h1 i{color:var(--gold);font-style:normal}
-.rt{display:flex;align-items:center;gap:10px}
-.st{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);display:flex;align-items:center;gap:6px}
-.d{width:7px;height:7px;border-radius:50%;background:var(--mu)}
-.on{background:var(--ok)}
-.off{background:var(--err)}
-#lk{background:none;border:1px solid var(--line);border-radius:8px;color:var(--mu);font-size:14px;padding:4px 8px;cursor:pointer;line-height:1}
-#lk.armed{border-color:var(--gold);color:var(--gold)}
-.who{display:flex;gap:10px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
-.who label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mu)}
-input{background:var(--ink);border:1px solid var(--line);border-radius:9px;color:var(--tx);font:13px ui-monospace,monospace;padding:9px 11px;flex:1;min-width:0}
+input{background:var(--ink);border:1px solid var(--line);border-radius:9px;color:var(--tx);font:14px ui-monospace,monospace;padding:11px;width:100%}
+input:focus{outline:none;border-color:var(--gold)}
+button{cursor:pointer;font:inherit}
+
+/* --- Autenticación --- */
+#auth{flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px;padding:28px 22px}
+.brand{text-align:center}
+.brand h1{font-size:34px}
+.brand p{margin:6px 0 0;color:var(--mu);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+.tabs{display:flex;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:4px}
+.tabs button{flex:1;background:none;border:0;border-radius:8px;color:var(--mu);font-size:13px;padding:9px}
+.tabs button[aria-selected=true]{background:var(--p2);color:var(--tx)}
+form{display:flex;flex-direction:column;gap:11px}
+label{display:flex;flex-direction:column;gap:5px;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--mu)}
+.primary{background:var(--gold);border:0;border-radius:9px;color:#191426;font-weight:600;padding:13px}
+.primary:disabled{opacity:.5;cursor:default}
+.hint{color:var(--mu);font-size:12px;text-align:center;margin:0}
+#msg{border-radius:9px;font-size:13px;padding:10px 12px;display:none}
+#msg.show{display:block}
+#msg.bad{background:rgba(217,112,112,.12);border:1px solid rgba(217,112,112,.5);color:var(--err)}
+#msg.good{background:rgba(111,174,140,.12);border:1px solid rgba(111,174,140,.5);color:var(--ok)}
+
+/* --- Consola --- */
+#app{flex:1;display:flex;flex-direction:column;height:100vh}
+header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
+.me{font-size:13px}
+.me b{display:block;font-weight:600}
+.me span{color:var(--gold);font:12px ui-monospace,monospace}
+.icons{display:flex;gap:7px}
+.icons button{background:none;border:1px solid var(--line);border-radius:8px;color:var(--mu);font-size:11px;padding:6px 9px}
+.icons button.armed{border-color:var(--gold);color:var(--gold)}
 #log{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .m{max-width:88%;padding:10px 13px;border-radius:9px;white-space:pre-wrap;word-break:break-word}
-.me{align-self:flex-end;background:var(--gold);color:#191426;font:500 13px ui-monospace,monospace;border-bottom-right-radius:3px}
+.mine{align-self:flex-end;background:var(--gold);color:#191426;font:500 13px ui-monospace,monospace;border-bottom-right-radius:3px}
 .bot{align-self:flex-start;background:var(--p2);border:1px solid var(--line);border-bottom-left-radius:3px}
-.bad{border-color:rgba(217,112,112,.55);color:var(--err)}
+.bot.bad{border-color:rgba(217,112,112,.55);color:var(--err)}
 footer{border-top:1px solid var(--line);background:var(--panel);padding:9px 16px 14px;display:flex;flex-direction:column;gap:8px}
-.ch{display:flex;gap:6px;overflow-x:auto}
-.ch button{flex:none;background:none;border:1px solid var(--line);border-radius:99px;color:var(--mu);font:11px ui-monospace,monospace;padding:5px 10px;white-space:nowrap}
+.chips{display:flex;gap:6px;overflow-x:auto}
+.chips button{flex:none;background:none;border:1px solid var(--line);border-radius:99px;color:var(--mu);font:11px ui-monospace,monospace;padding:5px 10px;white-space:nowrap}
 .row{display:flex;gap:8px}
-#msg{font-size:14px}
-#go{background:var(--gold);color:#191426;border:0;border-radius:9px;font:600 14px system-ui;padding:0 17px}
+.row input{flex:1;min-width:0}
+.row button{background:var(--gold);border:0;border-radius:9px;color:#191426;font-weight:600;padding:0 18px}
 </style>
 </head>
 <body>
-<header>
-  <h1>Son<i>a</i>mbulos</h1>
-  <div class="rt">
-    <div class="st"><span class="d" id="dot"></span><span id="stx">conectando</span></div>
-    <button id="lk" title="Clave de tesorero">L</button>
+
+<div id="auth">
+  <div class="brand">
+    <h1>Son<i>á</i>mbulos</h1>
+    <p>3 de octubre</p>
   </div>
-</header>
-<div class="who"><label for="me">Eres</label><input id="me" value="+573001112233"></div>
-<div id="log"></div>
-<footer>
-  <div class="ch" id="ch"></div>
-  <div class="row">
-    <input id="msg" placeholder="/send 5 tokens to @3153811758">
-    <button id="go">Enviar</button>
+
+  <div class="tabs">
+    <button id="tabLogin" aria-selected="true">Iniciar sesión</button>
+    <button id="tabSignup" aria-selected="false">Crear cuenta</button>
   </div>
-</footer>
+
+  <div id="msg"></div>
+
+  <form id="loginForm">
+    <label>Teléfono<input id="lPhone" inputmode="tel" autocomplete="tel" placeholder="3001234567"></label>
+    <label>PIN<input id="lPin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="4 dígitos"></label>
+    <button class="primary" type="submit">Verificar</button>
+    <p class="hint">Tu PIN confirma que la cuenta es tuya antes de mover monedas.</p>
+  </form>
+
+  <form id="signupForm" hidden>
+    <label>Nombre de usuario<input id="sName" autocomplete="nickname" placeholder="Como quieres que te llamemos"></label>
+    <label>Teléfono<input id="sPhone" inputmode="tel" autocomplete="tel" placeholder="3001234567"></label>
+    <label>Correo<input id="sEmail" type="email" autocomplete="email" placeholder="tu@correo.com"></label>
+    <label>PIN<input id="sPin" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="4 dígitos"></label>
+    <label>Repite el PIN<input id="sPin2" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="4 dígitos"></label>
+    <button class="primary" type="submit">Crear cuenta</button>
+    <p class="hint">Anota tu PIN. Si lo olvidas, solo el tesorero puede darte uno nuevo.</p>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div class="me"><b id="myName">—</b><span id="myBalance">— monedas</span></div>
+    <div class="icons">
+      <button id="keyBtn" title="Clave de tesorero">CLAVE</button>
+      <button id="outBtn">Salir</button>
+    </div>
+  </header>
+  <div id="log"></div>
+  <footer>
+    <div class="chips" id="chips"></div>
+    <div class="row">
+      <input id="input" placeholder="/send 5 tokens to @3153811758">
+      <button id="sendBtn">Enviar</button>
+    </div>
+  </footer>
+</div>
+
 <script>
-var L=document.getElementById('log'),M=document.getElementById('msg'),G=document.getElementById('go'),ME=document.getElementById('me'),D=document.getElementById('dot'),S=document.getElementById('stx'),K=document.getElementById('lk');
-function gk(){try{return localStorage.getItem('sb.k')||''}catch(e){return ''}}
-function sk(v){try{v?localStorage.setItem('sb.k',v):localStorage.removeItem('sb.k')}catch(e){}paint()}
-function gpin(ph){try{return localStorage.getItem('sb.pin.'+ph)||''}catch(e){return ''}}
-function spin(ph,v){try{v?localStorage.setItem('sb.pin.'+ph,v):localStorage.removeItem('sb.pin.'+ph)}catch(e){}}
-function paint(){var a=!!gk();K.textContent=a?'TESORERO':'CLAVE';K.className=a?'armed':''}
-K.onclick=function(){if(gk()){if(confirm('Olvidar la clave de tesorero?'))sk('')}else{var p=prompt('Clave de tesorero:');if(p)sk(p)}};
-try{var sp=localStorage.getItem('sb.p');if(sp)ME.value=sp}catch(e){}
-ME.onchange=function(){try{localStorage.setItem('sb.p',ME.value)}catch(e){}};
-['/balance','/send 5 tokens to @3153811758','/register Cherno','/history','/emit @3001112233 20','/help'].forEach(function(c){var b=document.createElement('button');b.textContent=c;b.onclick=function(){M.value=c;M.focus()};document.getElementById('ch').appendChild(b)});
-function add(k,t){var d=document.createElement('div');d.className='m '+k;d.textContent=t;L.appendChild(d);L.scrollTop=L.scrollHeight}
-function st(o){D.className='d '+(o?'on':'off');S.textContent=o?'en linea':'sin respuesta'}
-async function go(t,retry){if(!t)return;if(!retry)add('me',t);M.value='';G.disabled=true;var ph=ME.value.trim();try{var r=await fetch('/webhook/sms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({From:ph,Body:t,adminKey:gk(),pin:gpin(ph)})});var j=await r.json();if(j.locked&&!retry){if(j.reason==='pin'){var pn=prompt('PIN (4 dígitos):');if(pn){spin(ph,pn);G.disabled=false;return go(t,true)}}else{var p=prompt('Clave de tesorero:');if(p){sk(p);G.disabled=false;return go(t,true)}}}add(j.response?'bot':'bot bad',j.response||'HTTP '+r.status);st(true)}catch(e){add('bot bad','No se pudo alcanzar el bot.');st(false)}G.disabled=false;M.focus()}
-G.onclick=function(){go(M.value.trim())};
-M.onkeydown=function(e){if(e.key==='Enter'){e.preventDefault();go(M.value.trim())}};
-paint();
-fetch('/').then(function(){st(true);go('/help')}).catch(function(){st(false)});
+var $ = function (id) { return document.getElementById(id); };
+var token = null;
+
+/* localStorage puede fallar (modo privado, cookies bloqueadas); si falla, la
+   sesión simplemente dura lo que dure la pestaña. */
+function store(key, value) {
+  try {
+    if (value === undefined) return localStorage.getItem(key);
+    if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value);
+  } catch (e) {}
+  return null;
+}
+
+async function api(path, options) {
+  var res = await fetch(path, options);
+  var body = await res.json().catch(function () { return {}; });
+  if (!res.ok) throw new Error(body.error || 'Algo falló. Intenta de nuevo.');
+  return body;
+}
+
+function post(path, payload) {
+  return api(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+}
+
+/* ---------- Autenticación ---------- */
+
+function notify(text, kind) {
+  $('msg').textContent = text;
+  $('msg').className = text ? 'show ' + kind : '';
+}
+
+function showTab(name) {
+  var login = name === 'login';
+  $('tabLogin').setAttribute('aria-selected', login);
+  $('tabSignup').setAttribute('aria-selected', !login);
+  $('loginForm').hidden = !login;
+  $('signupForm').hidden = login;
+  notify('');
+}
+
+$('tabLogin').onclick = function () { showTab('login'); };
+$('tabSignup').onclick = function () { showTab('signup'); };
+
+function enterApp(session) {
+  token = session.token || token;
+  if (session.token) store('sb.token', session.token);
+  store('sb.phone', session.user.phoneNumber);
+
+  paintUser(session.user);
+  $('auth').hidden = true;
+  $('app').hidden = false;
+  $('input').focus();
+  if (!$('log').childElementCount) say('bot', '👋 Hola ' + session.user.name + '. Escribe /help para ver qué puedes hacer.');
+}
+
+function paintUser(user) {
+  $('myName').textContent = user.name;
+  $('myBalance').textContent = user.balance + ' monedas';
+}
+
+/* Vuelve a la pantalla de verificación conservando el teléfono, para que solo
+   haya que volver a poner el PIN. */
+function signOut(reason) {
+  token = null;
+  store('sb.token', null);
+  $('app').hidden = true;
+  $('auth').hidden = false;
+  showTab('login');
+  $('lPhone').value = store('sb.phone') || '';
+  $('lPin').value = '';
+  if (reason) notify(reason, 'bad');
+  $('lPin').focus();
+}
+
+async function submitForm(form, button, run) {
+  button.disabled = true;
+  notify('');
+  try {
+    await run();
+  } catch (error) {
+    notify(error.message, 'bad');
+  }
+  button.disabled = false;
+}
+
+$('loginForm').onsubmit = function (event) {
+  event.preventDefault();
+  var button = this.querySelector('.primary');
+  submitForm(this, button, async function () {
+    var session = await post('/api/login', { phone: $('lPhone').value, pin: $('lPin').value });
+    $('lPin').value = '';
+    enterApp(session);
+  });
+};
+
+$('signupForm').onsubmit = function (event) {
+  event.preventDefault();
+  var button = this.querySelector('.primary');
+  submitForm(this, button, async function () {
+    if ($('sPin').value !== $('sPin2').value) throw new Error('Los dos PIN no coinciden.');
+    var session = await post('/api/signup', {
+      name: $('sName').value,
+      phone: $('sPhone').value,
+      email: $('sEmail').value,
+      pin: $('sPin').value
+    });
+    $('sPin').value = $('sPin2').value = '';
+    enterApp(session);
+  });
+};
+
+/* ---------- Consola ---------- */
+
+function say(kind, text) {
+  var node = document.createElement('div');
+  node.className = 'm ' + kind;
+  node.textContent = text;
+  $('log').appendChild(node);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function adminKey(value) {
+  if (value !== undefined) store('sb.key', value);
+  var key = store('sb.key') || '';
+  $('keyBtn').textContent = key ? 'TESORERO' : 'CLAVE';
+  $('keyBtn').className = key ? 'armed' : '';
+  return key;
+}
+
+$('keyBtn').onclick = function () {
+  if (adminKey()) {
+    if (confirm('¿Olvidar la clave de tesorero?')) adminKey(null);
+  } else {
+    var typed = prompt('Clave de tesorero:');
+    if (typed) adminKey(typed);
+  }
+};
+
+$('outBtn').onclick = function () {
+  $('log').textContent = '';
+  signOut('');
+};
+
+async function send(text, isRetry) {
+  if (!text) return;
+  if (!isRetry) say('mine', text);
+  $('input').value = '';
+  $('sendBtn').disabled = true;
+
+  try {
+    var reply = await post('/webhook/sms', { Body: text, token: token, adminKey: adminKey() });
+
+    if (reply.locked && reply.reason === 'auth') {
+      signOut('Tu sesión expiró. Verifica tu PIN para seguir.');
+      return;
+    }
+
+    if (reply.locked && reply.reason === 'admin' && !isRetry) {
+      var typed = prompt('Clave de tesorero:');
+      if (typed) {
+        adminKey(typed);
+        $('sendBtn').disabled = false;
+        return send(text, true);
+      }
+    }
+
+    say(reply.locked ? 'bot bad' : 'bot', reply.response);
+    refreshBalance();
+  } catch (error) {
+    say('bot bad', 'No se pudo alcanzar el bot.');
+  }
+
+  $('sendBtn').disabled = false;
+  $('input').focus();
+}
+
+async function refreshBalance() {
+  try {
+    var me = await api('/api/me?token=' + encodeURIComponent(token));
+    paintUser(me.user);
+  } catch (error) {
+    signOut('Tu sesión expiró. Verifica tu PIN para seguir.');
+  }
+}
+
+$('sendBtn').onclick = function () { send($('input').value.trim()); };
+$('input').onkeydown = function (event) {
+  if (event.key === 'Enter') { event.preventDefault(); send($('input').value.trim()); }
+};
+
+['/balance', '/history', '/send 5 tokens to @3153811758', '/help'].forEach(function (command) {
+  var chip = document.createElement('button');
+  chip.textContent = command;
+  chip.onclick = function () { $('input').value = command; $('input').focus(); };
+  $('chips').appendChild(chip);
+});
+
+/* ---------- Arranque ---------- */
+
+(async function () {
+  adminKey();
+  $('lPhone').value = store('sb.phone') || '';
+
+  var saved = store('sb.token');
+  if (!saved) return;
+
+  try {
+    var me = await api('/api/me?token=' + encodeURIComponent(saved));
+    token = saved;
+    enterApp({ user: me.user });
+  } catch (error) {
+    store('sb.token', null);
+  }
+})();
 </script>
 </body>
 </html>

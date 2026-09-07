@@ -7,17 +7,17 @@ const { parseAmount, parseSendArgs } = require('../utils/parse');
 function createCommands(store, config) {
   const commands = {};
 
+  // La cuenta se crea desde la pantalla de registro (POST /api/signup), que es
+  // donde la persona elige su PIN. Acá /register solo cambia el nombre con el
+  // que la consola se dirige a quien ya inició sesión.
   commands.register = async (phoneNumber, args) => {
-    const name = args.join(' ') || `Usuario ${phoneNumber.slice(-4)}`;
-    const user = await store.getOrCreateUser(phoneNumber, name);
-    let msg = `✅ Registrado como: ${user.name}\n💰 Saldo inicial: ${user.balance} monedas`;
+    const name = args.join(' ').trim();
+    if (!name) return '❌ Formato: /register [nombre]';
 
-    // Solo se genera una vez: si el usuario ya existía con PIN, ensurePin
-    // devuelve null y no lo repite en el mensaje.
-    const pin = await store.ensurePin(phoneNumber);
-    if (pin) msg += `\n🔑 Tu PIN: ${pin} — lo vas a necesitar para transferir. Apúntalo.`;
+    const user = await store.setName(phoneNumber, name);
+    if (!user) return '❌ Usuario no registrado.';
 
-    return msg;
+    return `✅ Ahora te llamamos: ${user.name}\n💰 Tu saldo: ${user.balance} monedas`;
   };
 
   commands.balance = async (phoneNumber) => {
@@ -38,7 +38,10 @@ function createCommands(store, config) {
     return msg;
   };
 
-  commands.transfer = async (phoneNumber, args, context = {}) => {
+  // Quién transfiere ya está probado por la sesión (el webhook saca el
+  // teléfono del token firmado, no del body), así que acá no se vuelve a
+  // pedir el PIN.
+  commands.transfer = async (phoneNumber, args) => {
     if (args.length < 2) return '❌ Formato: /transfer @usuario X';
 
     const toPhone = normalizePhone(args[0].replace('@', ''));
@@ -46,16 +49,7 @@ function createCommands(store, config) {
 
     if (Number.isNaN(amount)) return '❌ Cantidad debe ser número > 0';
     if (!toPhone) return '❌ Número de destino inválido';
-
-    // El teléfono en /chat no viene verificado por nadie (no hay Twilio de
-    // por medio); el PIN es lo único que confirma que quien transfiere es
-    // realmente el dueño de ese número. Se marca "locked" (no un simple
-    // string de error) para que el cliente sepa que debe pedir el PIN y
-    // reintentar, igual que ya hace con la clave de tesorero.
-    const pinOk = await store.verifyPin(phoneNumber, context.pin);
-    if (!pinOk) {
-      return { locked: true, reason: 'pin', response: '🔒 PIN requerido o incorrecto.' };
-    }
+    if (toPhone === phoneNumber) return '❌ No puedes transferirte a ti mismo.';
 
     const result = await store.transfer(phoneNumber, toPhone, amount);
     if (!result.ok) {
@@ -74,11 +68,11 @@ function createCommands(store, config) {
     return `✅ Transferencia completada!\n📤 Enviaste: ${amount} monedas\n💰 Tu nuevo saldo: ${result.fromUser.balance}`;
   };
 
-  commands.send = async (phoneNumber, args, context) => {
+  commands.send = async (phoneNumber, args) => {
     const parsed = parseSendArgs(args);
     if (parsed.error === 'target') return '❌ Formato: /send 5 tokens to @numero';
     if (parsed.error === 'amount') return '❌ Cantidad debe ser número > 0';
-    return commands.transfer(phoneNumber, [parsed.target, String(parsed.amount)], context);
+    return commands.transfer(phoneNumber, [parsed.target, String(parsed.amount)]);
   };
 
   commands.emit = async (phoneNumber, args) => {
@@ -142,6 +136,8 @@ function createCommands(store, config) {
     if (!target) return '❌ Número inválido';
 
     const pin = await store.resetPin(target);
+    if (!pin) return '❌ Ese número no tiene cuenta.';
+
     return `✅ Nuevo PIN para @${target.slice(-4)}: ${pin}`;
   };
 
@@ -157,16 +153,18 @@ function createCommands(store, config) {
     return msg;
   };
 
+  // /help es el único comando que se puede pedir sin sesión, así que
+  // phoneNumber puede llegar nulo.
   commands.help = async (phoneNumber) => {
-    const user = await store.getUser(phoneNumber);
+    const user = phoneNumber ? await store.getUser(phoneNumber) : null;
     const isAdmin = user?.isAdmin;
 
     let msg = '📖 Comandos Sonámbulos:\n\n';
-    msg += '/register [nombre] — Registrarte\n';
     msg += '/balance — Ver tu saldo\n';
-    msg += '/transfer @usuario X — Enviar X monedas (pide tu PIN)\n';
-    msg += '/send X tokens to @numero — Enviar X (o 1 si omites X, pide tu PIN)\n';
+    msg += '/transfer @usuario X — Enviar X monedas\n';
+    msg += '/send X tokens to @numero — Enviar X (o 1 si omites X)\n';
     msg += '/history — Últimas transacciones\n';
+    msg += '/register [nombre] — Cambiar tu nombre\n';
 
     if (isAdmin) {
       msg += '\n👑 Admin:\n';

@@ -2,6 +2,10 @@ const crypto = require('crypto');
 const { User, Coin, Transaction, UniverseContent } = require('../models');
 const { generatePin, hashPin } = require('../utils/pin');
 
+function isDuplicateKey(error) {
+  return Boolean(error) && error.code === 11000;
+}
+
 // Capa de acceso a datos usada por los comandos del bot. Aislar Mongoose
 // detrás de esta interfaz (getUser, transfer, emitCoins, ...) es lo que
 // permite probar la lógica de negocio en test/ con un store en memoria,
@@ -90,19 +94,61 @@ function createMongoStore({ treasurerPhone }) {
     return User.find();
   }
 
-  // Genera y guarda un PIN nuevo, sobreescribiendo el anterior si existe.
-  async function resetPin(phoneNumber) {
-    const pin = generatePin();
-    await User.updateOne({ phoneNumber }, { $set: { pinHash: hashPin(phoneNumber, pin) } });
-    return pin;
+  // Alta desde la pantalla de crear cuenta, con el PIN que eligió la persona.
+  // El índice único de phoneNumber es el árbitro final: si dos registros del
+  // mismo número llegan a la vez, el segundo cae en el catch y no crea un
+  // usuario duplicado.
+  async function createAccount({ phoneNumber, pin, email, name }) {
+    const existing = await User.findOne({ phoneNumber });
+
+    // Un usuario sin pinHash no es una cuenta: es el registro fantasma que
+    // dejan transfer() y emitCoins() cuando le mandan monedas a un número que
+    // todavía no se registró. Registrarse lo reclama (y conserva el saldo);
+    // si lo tratáramos como "ya tiene cuenta", esa persona quedaría encerrada
+    // afuera, sin poder registrarse ni iniciar sesión.
+    if (existing) {
+      if (existing.pinHash) return { ok: false, reason: 'phone_taken' };
+
+      existing.name = name || existing.name;
+      existing.email = email;
+      existing.pinHash = hashPin(phoneNumber, pin);
+      existing.updatedAt = new Date();
+      await existing.save();
+      return { ok: true, user: await promoteIfTreasurer(existing) };
+    }
+
+    try {
+      const user = await User.create({
+        phoneNumber,
+        name: name || `Usuario ${phoneNumber.slice(-4)}`,
+        email,
+        pinHash: hashPin(phoneNumber, pin),
+      });
+      return { ok: true, user: await promoteIfTreasurer(user) };
+    } catch (error) {
+      if (isDuplicateKey(error)) return { ok: false, reason: 'phone_taken' };
+      throw error;
+    }
   }
 
-  // Solo asigna un PIN si el usuario todavía no tiene uno (llamado desde
-  // /register); no pisa el PIN de alguien que ya se registró antes.
-  async function ensurePin(phoneNumber) {
-    const user = await User.findOne({ phoneNumber });
-    if (user && user.pinHash) return null;
-    return resetPin(phoneNumber);
+  async function setName(phoneNumber, name) {
+    return User.findOneAndUpdate(
+      { phoneNumber },
+      { $set: { name, updatedAt: new Date() } },
+      { new: true }
+    );
+  }
+
+  // Genera y guarda un PIN nuevo, sobreescribiendo el anterior. Lo usa el
+  // tesorero cuando alguien olvidó el suyo.
+  async function resetPin(phoneNumber) {
+    const pin = generatePin();
+    const user = await User.findOneAndUpdate(
+      { phoneNumber },
+      { $set: { pinHash: hashPin(phoneNumber, pin) } },
+      { new: true }
+    );
+    return user ? pin : null;
   }
 
   async function verifyPin(phoneNumber, pin) {
@@ -149,7 +195,8 @@ function createMongoStore({ treasurerPhone }) {
     listTransactionsFor,
     recordContent,
     listContentForArtist,
-    ensurePin,
+    createAccount,
+    setName,
     verifyPin,
     resetPin,
   };

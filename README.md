@@ -14,20 +14,44 @@ Sistema de monedas digitales para eventos Sonámbulos, construido con Node.js y 
 ## Estructura del proyecto
 
 ```
-server.js                  Punto de entrada: arma Express, rutas y servicios
+server.js                  Arma las dependencias reales (Mongo, config) y escucha
 src/
+  app.js                   Construye la app de Express a partir de sus dependencias
   config.js                Lee y valida las variables de entorno
   db.js                    Conexión a MongoDB
   models/index.js          Esquemas de Mongoose (User, Coin, Event, Transaction, UniverseContent)
   store/mongoStore.js      Acceso a datos real (balances atómicos vía Mongo)
+  services/sessions.js     Emite y valida los tokens de sesión firmados (HMAC)
   services/messaging.js    Notificador (hoy solo deja rastro en el log; /chat ya muestra la respuesta)
-  services/commands.js     Lógica de los comandos del bot (/register, /transfer, /content, ...)
+  services/commands.js     Lógica de los comandos (/balance, /transfer, /content, ...)
+  routes/auth.js           POST /api/signup, POST /api/login, GET /api/me
   routes/webhook.js        Handler compartido por /webhook/sms y /webhook/message
   routes/admin.js          POST /admin/setup
-public/chat.html           Consola de chat servida en GET /chat
-test/                      Pruebas unitarias (node --test), con un store en memoria
+public/chat.html           Crear cuenta, iniciar sesión y consola, servido en GET /chat
+test/                      Pruebas (node --test), con un store en memoria
 .github/workflows/test.yml CI: corre `npm test` en cada push/PR a main
 ```
+
+## Cuentas y sesión
+
+La consola abre en una pantalla de **crear cuenta / iniciar sesión**:
+
+- **Crear cuenta** pide nombre de usuario, teléfono, correo y un PIN de 4 dígitos
+  que elige la persona. El PIN se guarda hasheado con el teléfono como sal
+  (`sha256(telefono:pin)`); nunca se guarda ni se devuelve en claro.
+- **Iniciar sesión** pide teléfono y PIN, y el botón *Verificar* devuelve un
+  token de sesión firmado que vale 12 horas.
+- Ese token es el que autoriza los comandos: el servidor saca de él el teléfono
+  de quien opera y **ignora el que venga en el cuerpo del request**, así nadie
+  puede escribir el número de otra persona y gastarle el saldo.
+- Sin sesión válida, todo comando salvo `/help` responde
+  `{ locked: true, reason: "auth" }` y la consola vuelve a pedir el PIN.
+
+Si alguien recibe monedas antes de registrarse, se le crea un registro sin PIN;
+cuando después crea su cuenta la reclama y conserva el saldo.
+
+Quien olvide su PIN necesita que el tesorero le genere uno nuevo con
+`/resetpin @usuario` y se lo diga en persona.
 
 ## Variables de entorno
 
@@ -40,6 +64,9 @@ NODE_ENV=production
 ADMIN_PASSWORD             Clave de tesorero para /emit, /users, /content y /admin/setup.
                            Si no se define, se genera una temporal en cada arranque
                            (se imprime en el log) — defínela para producción.
+SESSION_SECRET             Firma los tokens de sesión. Si no se define, se genera
+                           uno nuevo por arranque y cada redeploy cierra la sesión
+                           de todos — defínelo para producción.
 TREASURER_PHONE            Número (solo dígitos) promovido a admin automáticamente.
 BOT_NAME=Sonámbulos
 EVENT_ID=event_oct3_2026
@@ -48,16 +75,24 @@ EVENT_ID=event_oct3_2026
 ## Endpoints
 
 - `GET /` — health check
-- `POST /webhook/sms` — recibe mensajes en formato Twilio-compatible (`From`/`Body`) o JSON simple (`phone`/`message`)
-- `POST /webhook/message` — alias JSON del anterior, misma lógica
+- `GET /chat` — crear cuenta, iniciar sesión y consola
+- `POST /api/signup` — crea la cuenta (`name`, `phone`, `email`, `pin`) → `{ token, user }`
+- `POST /api/login` — verifica el PIN (`phone`, `pin`) → `{ token, user }`
+- `GET /api/me?token=` — datos de la sesión actual
+- `POST /webhook/sms` — ejecuta un comando (`Body` + `token`)
+- `POST /webhook/message` — alias del anterior, misma lógica
 - `POST /admin/setup` — habilita tesorero (body: `password`, `treasurerPhone`)
-- `GET /chat` — consola de chat en el navegador
 
-## Comandos del bot
+## Comandos
 
-`/register [nombre]` · `/balance` · `/history` · `/transfer @usuario X` ·
-`/send X tokens to @usuario` · `/emit @usuario X` (admin) · `/users` (admin) ·
-`/content [link] @talento1 @talento2` (admin) · `/help`
+Todos requieren sesión iniciada, salvo `/help`.
+
+`/balance` · `/history` · `/transfer @usuario X` · `/send X tokens to @usuario` ·
+`/register [nombre]` (cambia tu nombre) · `/help`
+
+Admin (además de la sesión, piden la clave de tesorero):
+`/emit @usuario X` · `/users` · `/content [link] @talento1 @talento2` ·
+`/resetpin @usuario`
 
 ## Desarrollo
 

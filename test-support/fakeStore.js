@@ -85,11 +85,25 @@ function createFakeStore({ treasurerPhone } = {}) {
       return content.filter((c) => c.artistPhone === artistPhone);
     },
 
-    async ensurePin(phoneNumber) {
+    // Un usuario sin pin es el registro fantasma que deja una transferencia
+    // hacia alguien que todavía no se registró; registrarse lo reclama.
+    async createAccount({ phoneNumber, pin, email, name }) {
+      const existing = users.get(phoneNumber);
+      if (existing && existing.pin) return { ok: false, reason: 'phone_taken' };
+
+      const user = existing || makeUser(phoneNumber, name);
+      if (name) user.name = name;
+      user.email = email;
+      user.pin = pin;
+      users.set(phoneNumber, user);
+      return { ok: true, user };
+    },
+
+    async setName(phoneNumber, name) {
       const user = users.get(phoneNumber);
-      if (!user || user.pin) return null;
-      user.pin = generatePin();
-      return user.pin;
+      if (!user) return null;
+      user.name = name;
+      return user;
     },
 
     async verifyPin(phoneNumber, pin) {
@@ -98,11 +112,8 @@ function createFakeStore({ treasurerPhone } = {}) {
     },
 
     async resetPin(phoneNumber) {
-      let user = users.get(phoneNumber);
-      if (!user) {
-        user = makeUser(phoneNumber);
-        users.set(phoneNumber, user);
-      }
+      const user = users.get(phoneNumber);
+      if (!user) return null;
       user.pin = generatePin();
       return user.pin;
     },
