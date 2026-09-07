@@ -74,3 +74,31 @@ test('sends the reply back through the messenger', async () => {
   assert.equal(sent.length, 1);
   assert.equal(sent[0].phone, '3000000001');
 });
+
+test('preserves the case of command arguments (names, content links)', async () => {
+  const { handleIncoming, store } = setup();
+  const req = { body: { From: '3000000001', Body: '/register Cherno' } };
+  const res = fakeRes();
+
+  await handleIncoming(req, res);
+
+  assert.equal(store._debug.users.get('3000000001').name, 'Cherno');
+});
+
+test('locks /transfer without the PIN, then lets it through once provided', async () => {
+  const { handleIncoming, store } = setup();
+
+  const registerReq = { body: { From: '3000000001', Body: '/register A' } };
+  await handleIncoming(registerReq, fakeRes());
+  store._debug.users.get('3000000001').balance = 10;
+  const pin = store._debug.users.get('3000000001').pin;
+
+  const lockedRes = fakeRes();
+  await handleIncoming({ body: { From: '3000000001', Body: '/transfer @3000000002 4' } }, lockedRes);
+  assert.equal(lockedRes.body.locked, true);
+  assert.equal(lockedRes.body.reason, 'pin');
+
+  const okRes = fakeRes();
+  await handleIncoming({ body: { From: '3000000001', Body: '/transfer @3000000002 4', pin } }, okRes);
+  assert.match(okRes.body.response, /Transferencia completada/);
+});

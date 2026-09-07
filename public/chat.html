@@ -55,6 +55,8 @@ footer{border-top:1px solid var(--line);background:var(--panel);padding:9px 16px
 var L=document.getElementById('log'),M=document.getElementById('msg'),G=document.getElementById('go'),ME=document.getElementById('me'),D=document.getElementById('dot'),S=document.getElementById('stx'),K=document.getElementById('lk');
 function gk(){try{return localStorage.getItem('sb.k')||''}catch(e){return ''}}
 function sk(v){try{v?localStorage.setItem('sb.k',v):localStorage.removeItem('sb.k')}catch(e){}paint()}
+function gpin(ph){try{return localStorage.getItem('sb.pin.'+ph)||''}catch(e){return ''}}
+function spin(ph,v){try{v?localStorage.setItem('sb.pin.'+ph,v):localStorage.removeItem('sb.pin.'+ph)}catch(e){}}
 function paint(){var a=!!gk();K.textContent=a?'TESORERO':'CLAVE';K.className=a?'armed':''}
 K.onclick=function(){if(gk()){if(confirm('Olvidar la clave de tesorero?'))sk('')}else{var p=prompt('Clave de tesorero:');if(p)sk(p)}};
 try{var sp=localStorage.getItem('sb.p');if(sp)ME.value=sp}catch(e){}
@@ -62,7 +64,7 @@ ME.onchange=function(){try{localStorage.setItem('sb.p',ME.value)}catch(e){}};
 ['/balance','/send 5 tokens to @3153811758','/register Cherno','/history','/emit @3001112233 20','/help'].forEach(function(c){var b=document.createElement('button');b.textContent=c;b.onclick=function(){M.value=c;M.focus()};document.getElementById('ch').appendChild(b)});
 function add(k,t){var d=document.createElement('div');d.className='m '+k;d.textContent=t;L.appendChild(d);L.scrollTop=L.scrollHeight}
 function st(o){D.className='d '+(o?'on':'off');S.textContent=o?'en linea':'sin respuesta'}
-async function go(t,retry){if(!t)return;if(!retry)add('me',t);M.value='';G.disabled=true;try{var r=await fetch('/webhook/sms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({From:ME.value.trim(),Body:t,adminKey:gk()})});var j=await r.json();if(j.locked&&!retry){var p=prompt('Clave de tesorero:');if(p){sk(p);G.disabled=false;return go(t,true)}}add(j.response?'bot':'bot bad',j.response||'HTTP '+r.status);st(true)}catch(e){add('bot bad','No se pudo alcanzar el bot.');st(false)}G.disabled=false;M.focus()}
+async function go(t,retry){if(!t)return;if(!retry)add('me',t);M.value='';G.disabled=true;var ph=ME.value.trim();try{var r=await fetch('/webhook/sms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({From:ph,Body:t,adminKey:gk(),pin:gpin(ph)})});var j=await r.json();if(j.locked&&!retry){if(j.reason==='pin'){var pn=prompt('PIN (4 dígitos):');if(pn){spin(ph,pn);G.disabled=false;return go(t,true)}}else{var p=prompt('Clave de tesorero:');if(p){sk(p);G.disabled=false;return go(t,true)}}}add(j.response?'bot':'bot bad',j.response||'HTTP '+r.status);st(true)}catch(e){add('bot bad','No se pudo alcanzar el bot.');st(false)}G.disabled=false;M.focus()}
 G.onclick=function(){go(M.value.trim())};
 M.onkeydown=function(e){if(e.key==='Enter'){e.preventDefault();go(M.value.trim())}};
 paint();

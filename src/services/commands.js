@@ -10,7 +10,14 @@ function createCommands(store, config) {
   commands.register = async (phoneNumber, args) => {
     const name = args.join(' ') || `Usuario ${phoneNumber.slice(-4)}`;
     const user = await store.getOrCreateUser(phoneNumber, name);
-    return `✅ Registrado como: ${user.name}\n💰 Saldo inicial: ${user.balance} monedas`;
+    let msg = `✅ Registrado como: ${user.name}\n💰 Saldo inicial: ${user.balance} monedas`;
+
+    // Solo se genera una vez: si el usuario ya existía con PIN, ensurePin
+    // devuelve null y no lo repite en el mensaje.
+    const pin = await store.ensurePin(phoneNumber);
+    if (pin) msg += `\n🔑 Tu PIN: ${pin} — lo vas a necesitar para transferir. Apúntalo.`;
+
+    return msg;
   };
 
   commands.balance = async (phoneNumber) => {
@@ -31,7 +38,7 @@ function createCommands(store, config) {
     return msg;
   };
 
-  commands.transfer = async (phoneNumber, args) => {
+  commands.transfer = async (phoneNumber, args, context = {}) => {
     if (args.length < 2) return '❌ Formato: /transfer @usuario X';
 
     const toPhone = normalizePhone(args[0].replace('@', ''));
@@ -39,6 +46,16 @@ function createCommands(store, config) {
 
     if (Number.isNaN(amount)) return '❌ Cantidad debe ser número > 0';
     if (!toPhone) return '❌ Número de destino inválido';
+
+    // El teléfono en /chat no viene verificado por nadie (no hay Twilio de
+    // por medio); el PIN es lo único que confirma que quien transfiere es
+    // realmente el dueño de ese número. Se marca "locked" (no un simple
+    // string de error) para que el cliente sepa que debe pedir el PIN y
+    // reintentar, igual que ya hace con la clave de tesorero.
+    const pinOk = await store.verifyPin(phoneNumber, context.pin);
+    if (!pinOk) {
+      return { locked: true, reason: 'pin', response: '🔒 PIN requerido o incorrecto.' };
+    }
 
     const result = await store.transfer(phoneNumber, toPhone, amount);
     if (!result.ok) {
@@ -57,11 +74,11 @@ function createCommands(store, config) {
     return `✅ Transferencia completada!\n📤 Enviaste: ${amount} monedas\n💰 Tu nuevo saldo: ${result.fromUser.balance}`;
   };
 
-  commands.send = async (phoneNumber, args) => {
+  commands.send = async (phoneNumber, args, context) => {
     const parsed = parseSendArgs(args);
     if (parsed.error === 'target') return '❌ Formato: /send 5 tokens to @numero';
     if (parsed.error === 'amount') return '❌ Cantidad debe ser número > 0';
-    return commands.transfer(phoneNumber, [parsed.target, String(parsed.amount)]);
+    return commands.transfer(phoneNumber, [parsed.target, String(parsed.amount)], context);
   };
 
   commands.emit = async (phoneNumber, args) => {
@@ -113,6 +130,21 @@ function createCommands(store, config) {
     return `✅ Contenido publicado para ${targets.length} talento(s).`;
   };
 
+  // /resetpin @usuario — el tesorero genera un PIN nuevo cuando alguien lo
+  // olvida y se lo dice de viva voz en el evento; no hay forma de
+  // recuperarlo por chat porque eso anularía el propósito del PIN.
+  commands.resetpin = async (phoneNumber, args) => {
+    const user = await store.getUser(phoneNumber);
+    if (!user || !user.isAdmin) return '❌ No tienes permisos de admin.';
+    if (args.length < 1) return '❌ Formato: /resetpin @usuario';
+
+    const target = normalizePhone(args[0].replace('@', ''));
+    if (!target) return '❌ Número inválido';
+
+    const pin = await store.resetPin(target);
+    return `✅ Nuevo PIN para @${target.slice(-4)}: ${pin}`;
+  };
+
   commands.users = async (phoneNumber) => {
     const user = await store.getUser(phoneNumber);
     if (!user || !user.isAdmin) return '❌ No tienes permisos.';
@@ -132,8 +164,8 @@ function createCommands(store, config) {
     let msg = '📖 Comandos Sonámbulos:\n\n';
     msg += '/register [nombre] — Registrarte\n';
     msg += '/balance — Ver tu saldo\n';
-    msg += '/transfer @usuario X — Enviar X monedas\n';
-    msg += '/send X tokens to @numero — Enviar X (o 1 si omites X)\n';
+    msg += '/transfer @usuario X — Enviar X monedas (pide tu PIN)\n';
+    msg += '/send X tokens to @numero — Enviar X (o 1 si omites X, pide tu PIN)\n';
     msg += '/history — Últimas transacciones\n';
 
     if (isAdmin) {
@@ -141,6 +173,7 @@ function createCommands(store, config) {
       msg += '/emit @usuario X — Emitir monedas\n';
       msg += '/users — Listar usuarios\n';
       msg += '/content [link] @talento1 @talento2 — Publicar contenido en sus Universos\n';
+      msg += '/resetpin @usuario — Generar un PIN nuevo para alguien que lo olvidó\n';
     }
 
     return msg;

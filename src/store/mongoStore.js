@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { User, Coin, Transaction, UniverseContent } = require('../models');
+const { generatePin, hashPin } = require('../utils/pin');
 
 // Capa de acceso a datos usada por los comandos del bot. Aislar Mongoose
 // detrás de esta interfaz (getUser, transfer, emitCoins, ...) es lo que
@@ -89,6 +90,28 @@ function createMongoStore({ treasurerPhone }) {
     return User.find();
   }
 
+  // Genera y guarda un PIN nuevo, sobreescribiendo el anterior si existe.
+  async function resetPin(phoneNumber) {
+    const pin = generatePin();
+    await User.updateOne({ phoneNumber }, { $set: { pinHash: hashPin(phoneNumber, pin) } });
+    return pin;
+  }
+
+  // Solo asigna un PIN si el usuario todavía no tiene uno (llamado desde
+  // /register); no pisa el PIN de alguien que ya se registró antes.
+  async function ensurePin(phoneNumber) {
+    const user = await User.findOne({ phoneNumber });
+    if (user && user.pinHash) return null;
+    return resetPin(phoneNumber);
+  }
+
+  async function verifyPin(phoneNumber, pin) {
+    if (!pin) return false;
+    const user = await User.findOne({ phoneNumber });
+    if (!user || !user.pinHash) return false;
+    return user.pinHash === hashPin(phoneNumber, pin);
+  }
+
   async function recordTransaction(data) {
     return Transaction.create({ ...data, visible: true });
   }
@@ -126,6 +149,9 @@ function createMongoStore({ treasurerPhone }) {
     listTransactionsFor,
     recordContent,
     listContentForArtist,
+    ensurePin,
+    verifyPin,
+    resetPin,
   };
 }
 

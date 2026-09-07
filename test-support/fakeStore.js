@@ -1,3 +1,5 @@
+const { generatePin } = require('../src/utils/pin');
+
 // Implementación en memoria de la misma interfaz que src/store/mongoStore.js,
 // para poder probar src/services/commands.js sin una base de datos real.
 function createFakeStore({ treasurerPhone } = {}) {
@@ -12,6 +14,7 @@ function createFakeStore({ treasurerPhone } = {}) {
       balance: 0,
       isArtist: false,
       isAdmin: Boolean(treasurerPhone) && phoneNumber === treasurerPhone,
+      pin: null,
     };
   }
 
@@ -80,6 +83,28 @@ function createFakeStore({ treasurerPhone } = {}) {
 
     async listContentForArtist(artistPhone) {
       return content.filter((c) => c.artistPhone === artistPhone);
+    },
+
+    async ensurePin(phoneNumber) {
+      const user = users.get(phoneNumber);
+      if (!user || user.pin) return null;
+      user.pin = generatePin();
+      return user.pin;
+    },
+
+    async verifyPin(phoneNumber, pin) {
+      const user = users.get(phoneNumber);
+      return Boolean(user && user.pin && pin && user.pin === pin);
+    },
+
+    async resetPin(phoneNumber) {
+      let user = users.get(phoneNumber);
+      if (!user) {
+        user = makeUser(phoneNumber);
+        users.set(phoneNumber, user);
+      }
+      user.pin = generatePin();
+      return user.pin;
     },
 
     _debug: { users, transactions, content },

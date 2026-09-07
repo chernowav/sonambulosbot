@@ -6,6 +6,10 @@ const userSchema = new mongoose.Schema({
   balance: { type: Number, default: 0 },
   isArtist: { type: Boolean, default: false },
   isAdmin: { type: Boolean, default: false },
+  // Hash del PIN de 4 dígitos que confirma quién transfiere/compra desde la
+  // consola web, donde el teléfono ya no viene verificado por un proveedor
+  // de SMS. Ver src/utils/pin.js.
+  pinHash: String,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
