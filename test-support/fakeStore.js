@@ -3,6 +3,7 @@
 function createFakeStore({ treasurerPhone } = {}) {
   const users = new Map();
   const transactions = [];
+  const content = [];
 
   function makeUser(phoneNumber, name) {
     return {
@@ -71,7 +72,17 @@ function createFakeStore({ treasurerPhone } = {}) {
         .reverse();
     },
 
-    _debug: { users, transactions },
+    async recordContent(link, artistPhones, addedBy) {
+      const docs = artistPhones.map((artistPhone) => ({ link, artistPhone, addedBy }));
+      content.push(...docs);
+      return docs;
+    },
+
+    async listContentForArtist(artistPhone) {
+      return content.filter((c) => c.artistPhone === artistPhone);
+    },
+
+    _debug: { users, transactions, content },
   };
 }
 

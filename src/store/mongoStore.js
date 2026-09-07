@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { User, Coin, Transaction } = require('../models');
+const { User, Coin, Transaction, UniverseContent } = require('../models');
 
 // Capa de acceso a datos usada por los comandos del bot. Aislar Mongoose
 // detrás de esta interfaz (getUser, transfer, emitCoins, ...) es lo que
@@ -102,6 +102,20 @@ function createMongoStore({ treasurerPhone }) {
       .limit(limit);
   }
 
+  // Un link de contenido puede etiquetar a varios talentos a la vez (los 6
+  // capturados juntos en una misma locación); crea una entrada por cada uno
+  // para que cada Universo tenga su propio feed.
+  async function recordContent(link, artistPhones, addedBy) {
+    const docs = await UniverseContent.insertMany(
+      artistPhones.map((artistPhone) => ({ link, artistPhone, addedBy }))
+    );
+    return docs;
+  }
+
+  async function listContentForArtist(artistPhone, limit = 20) {
+    return UniverseContent.find({ artistPhone }).sort({ createdAt: -1 }).limit(limit);
+  }
+
   return {
     getUser,
     getOrCreateUser,
@@ -110,6 +124,8 @@ function createMongoStore({ treasurerPhone }) {
     listUsers,
     recordTransaction,
     listTransactionsFor,
+    recordContent,
+    listContentForArtist,
   };
 }
 

@@ -1,6 +1,6 @@
 const { normalizePhone } = require('../utils/phone');
 
-const ADMIN_LOCKED_COMMANDS = new Set(['emit', 'users']);
+const ADMIN_LOCKED_COMMANDS = new Set(['emit', 'users', 'content']);
 
 // Handler compartido por /webhook/sms y /webhook/message. Antes cada ruta
 // tenía su propia copia casi idéntica de este código (parseo de comando,

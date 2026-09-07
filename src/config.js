@@ -16,15 +16,6 @@ const config = {
   treasurerPhone: process.env.TREASURER_PHONE || '',
   botName: process.env.BOT_NAME || 'Sonámbulos',
   defaultEventId: process.env.EVENT_ID || 'event_oct3_2026',
-  twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID,
-    authToken: process.env.TWILIO_AUTH_TOKEN,
-    // Acepta ambos nombres de variable: TWILIO_PHONE_NUMBER (el que usa el
-    // código) y TWILIO_WHATSAPP_NUMBER (el que documentaba el README), para
-    // que configurar cualquiera de los dos active el envío real.
-    from: process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_WHATSAPP_NUMBER,
-    defaultCountryCode: process.env.DEFAULT_COUNTRY_CODE || '+57',
-  },
 };
 
 if (!config.mongodbUri) {

@@ -90,6 +90,29 @@ function createCommands(store, config) {
     return `✅ Emitidas ${amount} monedas a ${toUser.name}\n📊 Nuevo saldo: ${toUser.balance}`;
   };
 
+  // /content [link] @artista1 @artista2 ... — el productor pega el link ya
+  // editado y etiqueta a todos los talentos capturados en esa locación; cada
+  // uno recibe su propia entrada en el feed de Universos. Gateado como admin
+  // por ahora: aún no existe un rol de "productor" separado del tesorero.
+  commands.content = async (phoneNumber, args) => {
+    const user = await store.getUser(phoneNumber);
+    if (!user || !user.isAdmin) return '❌ No tienes permisos de admin.';
+
+    const link = args.find((a) => /^https?:\/\//.test(a));
+    if (!link) return '❌ Formato: /content [link] @talento1 @talento2 ...';
+
+    const targets = args
+      .filter((a) => a.startsWith('@'))
+      .map((a) => normalizePhone(a.replace('@', '')))
+      .filter(Boolean);
+
+    if (targets.length === 0) return '❌ Etiqueta al menos un talento con @numero';
+
+    await store.recordContent(link, targets, phoneNumber);
+
+    return `✅ Contenido publicado para ${targets.length} talento(s).`;
+  };
+
   commands.users = async (phoneNumber) => {
     const user = await store.getUser(phoneNumber);
     if (!user || !user.isAdmin) return '❌ No tienes permisos.';
@@ -117,6 +140,7 @@ function createCommands(store, config) {
       msg += '\n👑 Admin:\n';
       msg += '/emit @usuario X — Emitir monedas\n';
       msg += '/users — Listar usuarios\n';
+      msg += '/content [link] @talento1 @talento2 — Publicar contenido en sus Universos\n';
     }
 
     return msg;

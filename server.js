@@ -12,7 +12,7 @@ const { createAdminRouter } = require('./src/routes/admin');
 db.connect(config.mongodbUri);
 
 const store = createMongoStore({ treasurerPhone: config.treasurerPhone });
-const sendMessage = createMessenger(config.twilio);
+const sendMessage = createMessenger();
 const commands = createCommands(store, config);
 const handleIncoming = createWebhookHandler({ commands, config, sendMessage });
 

@@ -51,9 +51,20 @@ const transactionSchema = new mongoose.Schema({
   visible: { type: Boolean, default: true },
 });
 
+// Una publicación del programa de contenido (30 talentos). Un mismo link de
+// producción genera un UniverseContent por cada talento etiquetado, porque
+// cada uno tiene su propio feed en Universos.
+const universeContentSchema = new mongoose.Schema({
+  link: { type: String, required: true },
+  artistPhone: { type: String, required: true },
+  addedBy: String,
+  createdAt: { type: Date, default: Date.now },
+});
+
 module.exports = {
   User: mongoose.model('User', userSchema),
   Coin: mongoose.model('Coin', coinSchema),
   Event: mongoose.model('Event', eventSchema),
   Transaction: mongoose.model('Transaction', transactionSchema),
+  UniverseContent: mongoose.model('UniverseContent', universeContentSchema),
 };

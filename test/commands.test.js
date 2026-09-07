@@ -87,6 +87,42 @@ test('emit succeeds for the treasurer and credits the recipient', async () => {
   assert.equal(store._debug.users.get('3000000002').balance, 3);
 });
 
+test('content is rejected for non-admin users', async () => {
+  const { commands } = setup();
+  await commands.register('3000000001', ['A']);
+  const reply = await commands.content('3000000001', ['https://drive.example/x', '@3000000002']);
+  assert.match(reply, /No tienes permisos/);
+});
+
+test('content requires a link and at least one tagged talent', async () => {
+  const { commands } = setup('3000000009');
+  await commands.register('3000000009', ['Tesorero']);
+
+  const noLink = await commands.content('3000000009', ['@3000000002']);
+  assert.match(noLink, /Formato: \/content/);
+
+  const noTargets = await commands.content('3000000009', ['https://drive.example/x']);
+  assert.match(noTargets, /al menos un talento/);
+});
+
+test('content creates one entry per tagged talent', async () => {
+  const { commands, store } = setup('3000000009');
+  await commands.register('3000000009', ['Tesorero']);
+
+  const reply = await commands.content('3000000009', [
+    'https://drive.example/clip.mp4',
+    '@3000000002',
+    '@3000000003',
+  ]);
+
+  assert.match(reply, /publicado para 2 talento/);
+  assert.equal(store._debug.content.length, 2);
+  assert.deepEqual(
+    store._debug.content.map((c) => c.artistPhone).sort(),
+    ['3000000002', '3000000003']
+  );
+});
+
 test('help only lists admin commands to admins', async () => {
   const { commands } = setup('3000000009');
   await commands.register('3000000009', ['Tesorero']);

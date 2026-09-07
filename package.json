@@ -1,7 +1,7 @@
 {
   "name": "sonambulosbot",
   "version": "1.0.0",
-  "description": "WhatsApp Bot para eventos - Sistema de monedas Sonámbulos",
+  "description": "Consola de chat web para eventos - Sistema de monedas Sonámbulos",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,7 +9,7 @@
     "test": "node --test"
   },
   "keywords": [
-    "whatsapp",
+    "chat",
     "bot",
     "monedas",
     "eventos"
@@ -19,10 +19,9 @@
   "dependencies": {
     "express": "^4.18.2",
     "mongoose": "^8.24.4",
-    "twilio": "^5.13.1",
     "dotenv": "^16.0.3"
   },
   "devDependencies": {
-    "nodemon": "^2.0.20"
+    "nodemon": "^3.1.14"
   }
 }
