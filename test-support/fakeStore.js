@@ -20,7 +20,11 @@ function createFakeStore({ treasurerPhone } = {}) {
 
   return {
     async getUser(phoneNumber) {
-      return users.get(phoneNumber) || null;
+      const user = users.get(phoneNumber) || null;
+      // Igual que mongoStore: el tesorero queda admin aunque se haya
+      // registrado antes de que se configurara su número.
+      if (user && treasurerPhone && phoneNumber === treasurerPhone) user.isAdmin = true;
+      return user;
     },
 
     async getOrCreateUser(phoneNumber, name) {

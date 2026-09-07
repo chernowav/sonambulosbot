@@ -19,8 +19,11 @@ function createMongoStore({ treasurerPhone }) {
     return user;
   }
 
+  // Promueve también al leer, no solo al crear la cuenta: si TREASURER_PHONE
+  // se configura después de que el tesorero se registró, igual queda admin la
+  // próxima vez que entra. Escribe una sola vez — después isAdmin ya es true.
   async function getUser(phoneNumber) {
-    return User.findOne({ phoneNumber });
+    return promoteIfTreasurer(await User.findOne({ phoneNumber }));
   }
 
   async function getOrCreateUser(phoneNumber, name = null) {

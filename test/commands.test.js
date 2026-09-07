@@ -97,6 +97,21 @@ test('send rejects a message with no identifiable target', async () => {
   assert.match(reply, /Formato: \/send/);
 });
 
+test('the treasurer becomes admin even if they registered before being named', async () => {
+  const store = createFakeStore({ treasurerPhone: undefined });
+  await store.createAccount({ phoneNumber: '3000000009', pin: '1234', email: 'a@b.co', name: 'T' });
+  assert.equal(store._debug.users.get('3000000009').isAdmin, false);
+
+  // Ahora sí se configura TREASURER_PHONE y vuelve a entrar.
+  const named = createFakeStore({ treasurerPhone: '3000000009' });
+  named._debug.users.set('3000000009', store._debug.users.get('3000000009'));
+
+  const commands = createCommands(named, { defaultEventId: 'event_test' });
+  const reply = await commands.emit('3000000009', ['@3000000002', '3']);
+
+  assert.match(reply, /Emitidas 3 monedas/);
+});
+
 test('emit is rejected for non-admin users', async () => {
   const { commands, account } = setup();
   await account('3000000001', 'A');

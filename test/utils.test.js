@@ -5,8 +5,8 @@ const { normalizePhone, digitsOnly } = require('../src/utils/phone');
 const { parseAmount, parseSendArgs } = require('../src/utils/parse');
 
 test('normalizePhone keeps only the last 10 digits', () => {
-  assert.equal(normalizePhone('+57 315 381 1758'), '3153811758');
-  assert.equal(normalizePhone('3153811758'), '3153811758');
+  assert.equal(normalizePhone('+57 300 111 2233'), '3001112233');
+  assert.equal(normalizePhone('3001112233'), '3001112233');
   assert.equal(digitsOnly('+57-300-111-2233'), '573001112233');
 });
 
@@ -23,15 +23,15 @@ test('parseAmount falls back when the value is missing', () => {
 });
 
 test('parseSendArgs finds an @handle target and an explicit amount', () => {
-  assert.deepEqual(parseSendArgs(['5', 'tokens', 'to', '@3153811758']), {
-    target: '3153811758',
+  assert.deepEqual(parseSendArgs(['5', 'tokens', 'to', '@3001112233']), {
+    target: '3001112233',
     amount: 5,
   });
 });
 
 test('parseSendArgs defaults the amount to 1 when omitted', () => {
-  assert.deepEqual(parseSendArgs(['tokens', 'to', '@3153811758']), {
-    target: '3153811758',
+  assert.deepEqual(parseSendArgs(['tokens', 'to', '@3001112233']), {
+    target: '3001112233',
     amount: 1,
   });
 });
