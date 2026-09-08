@@ -2,59 +2,125 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Sonámbulos</title>
 <style>
-:root{--ink:#131120;--panel:#1D1A2C;--p2:#252137;--line:#2F2B44;--tx:#E9E5F2;--mu:#8983A6;--gold:#CBA135;--err:#D97070;--ok:#6FAE8C}
+:root{
+  /* Superficies, de más honda a más elevada. */
+  --bg:#131120;
+  --panel:#1E1B2E;
+  --raised:#2A2640;
+  --fill:#242034;
+  --sep:rgba(255,255,255,.09);
+
+  --tx:#F0EDF7;
+  --mu:#9C96B8;          /* 6.0:1 sobre --panel, 6.4:1 sobre --bg */
+  --gold:#D9B04A;        /* 8.9:1 sobre --bg */
+  --on-gold:#1A1526;     /* 8.0:1 sobre --gold */
+  --err:#FF8A8A;
+  --ok:#7ED4A6;
+
+  /* Escala tipográfica en rem: si la persona agranda la letra del sistema,
+     toda la interfaz crece con ella. En px no crecía nada. */
+  --t-hero:2rem;
+  --t-title:1.375rem;
+  --t-body:1.0625rem;    /* 17px, el tamaño por defecto en móvil */
+  --t-callout:1rem;
+  --t-sub:.9375rem;
+  --t-foot:.8125rem;     /* 13px, sobre el mínimo de 11 */
+
+  --r-card:14px;
+  --r-ctl:11px;
+  --tap:44px;            /* área táctil mínima de las HIG */
+  --pad:18px;
+}
 *{box-sizing:border-box}
-/* Sin esto, el display:flex de form y #app le gana al atributo hidden y se
-   ven las dos pantallas encimadas. */
 [hidden]{display:none!important}
-body{margin:0 auto;max-width:520px;min-height:100vh;display:flex;flex-direction:column;background:var(--ink);color:var(--tx);font:15px/1.5 system-ui,sans-serif;border-left:1px solid var(--line);border-right:1px solid var(--line)}
-h1{margin:0;font:400 24px Georgia,serif}
-h1 i{color:var(--gold);font-style:normal}
-input{background:var(--ink);border:1px solid var(--line);border-radius:9px;color:var(--tx);font:14px ui-monospace,monospace;padding:11px;width:100%}
-input:focus{outline:none;border-color:var(--gold)}
-button{cursor:pointer;font:inherit}
 
-/* --- Autenticación --- */
-#auth{flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px;padding:28px 22px}
-.brand{text-align:center}
-.brand h1{font-size:34px}
-.brand p{margin:6px 0 0;color:var(--mu);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
-.tabs{display:flex;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:4px}
-.tabs button{flex:1;background:none;border:0;border-radius:8px;color:var(--mu);font-size:13px;padding:9px}
-.tabs button[aria-selected=true]{background:var(--p2);color:var(--tx)}
-form{display:flex;flex-direction:column;gap:11px}
-label{display:flex;flex-direction:column;gap:5px;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--mu)}
-.primary{background:var(--gold);border:0;border-radius:9px;color:#191426;font-weight:600;padding:13px}
-.primary:disabled{opacity:.5;cursor:default}
-.hint{color:var(--mu);font-size:12px;text-align:center;margin:0}
-#msg{border-radius:9px;font-size:13px;padding:10px 12px;display:none}
-#msg.show{display:block}
-#msg.bad{background:rgba(217,112,112,.12);border:1px solid rgba(217,112,112,.5);color:var(--err)}
-#msg.good{background:rgba(111,174,140,.12);border:1px solid rgba(111,174,140,.5);color:var(--ok)}
+body{
+  margin:0 auto;max-width:540px;min-height:100dvh;
+  display:flex;flex-direction:column;
+  background:var(--bg);color:var(--tx);
+  font:var(--t-body)/1.47 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  border-left:1px solid var(--sep);border-right:1px solid var(--sep);
+}
+button{cursor:pointer;font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 
-/* --- Consola --- */
-#app{flex:1;display:flex;flex-direction:column;height:100vh}
-header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
-.me{font-size:13px}
-.me b{display:block;font-weight:600}
-.me span{color:var(--gold);font:12px ui-monospace,monospace}
-.icons{display:flex;gap:7px}
-.icons button{background:none;border:1px solid var(--line);border-radius:8px;color:var(--mu);font-size:11px;padding:6px 9px}
-.icons button.armed{border-color:var(--gold);color:var(--gold)}
-#log{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
-.m{max-width:88%;padding:10px 13px;border-radius:9px;white-space:pre-wrap;word-break:break-word}
-.mine{align-self:flex-end;background:var(--gold);color:#191426;font:500 13px ui-monospace,monospace;border-bottom-right-radius:3px}
-.bot{align-self:flex-start;background:var(--p2);border:1px solid var(--line);border-bottom-left-radius:3px}
-.bot.bad{border-color:rgba(217,112,112,.55);color:var(--err)}
-footer{border-top:1px solid var(--line);background:var(--panel);padding:9px 16px 14px;display:flex;flex-direction:column;gap:8px}
-.chips{display:flex;gap:6px;overflow-x:auto}
-.chips button{flex:none;background:none;border:1px solid var(--line);border-radius:99px;color:var(--mu);font:11px ui-monospace,monospace;padding:5px 10px;white-space:nowrap}
-.row{display:flex;gap:8px}
-.row input{flex:1;min-width:0}
-.row button{background:var(--gold);border:0;border-radius:9px;color:#191426;font-weight:600;padding:0 18px}
+/* Sin esto, el zoom automático de iOS al enfocar un campo descuadra la
+   pantalla. 17px es justo el umbral en que Safari deja de hacerlo. */
+input{font-size:var(--t-body)}
+
+@media (prefers-reduced-motion:no-preference){
+  .seg button,.primary,.chip,.iconbtn{transition:background-color .18s ease,opacity .18s ease}
+}
+
+/* ---------------- Entrar / Crear cuenta ---------------- */
+
+#auth{flex:1;display:flex;flex-direction:column;justify-content:center;gap:22px;padding:32px var(--pad) calc(32px + env(safe-area-inset-bottom))}
+.brand{text-align:center;margin-bottom:2px}
+.brand h1{margin:0;font:400 var(--t-hero)/1.1 Georgia,"Times New Roman",serif;letter-spacing:-.01em}
+.brand h1 i{color:var(--gold);font-style:normal}
+.brand p{margin:7px 0 0;color:var(--mu);font-size:var(--t-sub)}
+
+/* Control segmentado, como el de iOS. */
+.seg{display:flex;gap:3px;background:var(--fill);border-radius:var(--r-ctl);padding:3px}
+.seg button{flex:1;min-height:var(--tap);border:0;border-radius:9px;background:none;color:var(--mu);font-size:var(--t-sub);font-weight:500}
+.seg button[aria-selected=true]{background:var(--raised);color:var(--tx);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+
+form{display:flex;flex-direction:column;gap:16px}
+
+/* Lista agrupada: un bloque redondeado con filas separadas por hairlines. */
+.group{background:var(--panel);border-radius:var(--r-card);overflow:hidden}
+.row{padding:9px 15px;border-top:1px solid var(--sep)}
+.row:first-child{border-top:0}
+.row:focus-within{background:var(--fill)}
+.row label{display:block;font-size:var(--t-foot);color:var(--mu);margin-bottom:1px}
+.row input{width:100%;min-height:30px;padding:0;border:0;background:none;color:var(--tx);line-height:1.3}
+.row input::placeholder{color:#6C6688}
+.row input:focus{outline:none}
+
+.primary{width:100%;min-height:50px;border:0;border-radius:var(--r-card);background:var(--gold);color:var(--on-gold);font-size:var(--t-body);font-weight:600}
+.primary:disabled{opacity:.38;cursor:default}
+
+.hint{margin:0;padding:0 4px;color:var(--mu);font-size:var(--t-foot);text-align:center}
+
+#msg{border-radius:var(--r-ctl);font-size:var(--t-sub);padding:12px 14px}
+#msg:empty{display:none}
+#msg.bad{background:rgba(255,138,138,.13);color:var(--err)}
+#msg.good{background:rgba(126,212,166,.13);color:var(--ok)}
+
+/* ---------------- Consola ---------------- */
+
+#app{flex:1;display:flex;flex-direction:column;min-height:100dvh}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px var(--pad);border-bottom:1px solid var(--sep)}
+.who{min-width:0}
+.who .name{font-size:var(--t-foot);color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who .bal{font-size:var(--t-title);font-weight:600;color:var(--gold);line-height:1.2}
+/* Solo la unidad va atenuada. Sin la clase, este selector alcanzaba también
+   al número y dejaba el saldo — el dato más importante de la pantalla —
+   pintado como texto secundario. */
+.who .bal .unit{font-size:var(--t-sub);font-weight:400;color:var(--mu);margin-left:.3em}
+.acts{display:flex;gap:8px;flex:none}
+.iconbtn{min-height:var(--tap);min-width:var(--tap);padding:0 13px;border:1px solid var(--sep);border-radius:var(--r-ctl);background:none;color:var(--mu);font-size:var(--t-foot);font-weight:500}
+.iconbtn.armed{border-color:var(--gold);color:var(--gold)}
+
+#log{flex:1;overflow-y:auto;padding:16px var(--pad);display:flex;flex-direction:column;gap:11px}
+.m{max-width:86%;padding:11px 14px;border-radius:19px;white-space:pre-wrap;word-break:break-word;font-size:var(--t-callout)}
+.mine{align-self:flex-end;background:var(--gold);color:var(--on-gold);border-bottom-right-radius:6px;font-weight:500}
+.bot{align-self:flex-start;background:var(--panel);border-bottom-left-radius:6px}
+.bot.bad{background:rgba(255,138,138,.13);color:var(--err)}
+
+footer{border-top:1px solid var(--sep);background:var(--panel);padding:10px var(--pad) calc(12px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
+.chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;min-height:36px;padding:0 15px;border:1px solid var(--sep);border-radius:999px;background:none;color:var(--mu);font-size:var(--t-foot)}
+.bar{display:flex;gap:9px;align-items:flex-end}
+.bar input{flex:1;min-width:0;min-height:var(--tap);padding:10px 15px;border:1px solid var(--sep);border-radius:22px;background:var(--bg);color:var(--tx)}
+.bar input:focus{outline:none;border-color:var(--gold)}
+.bar button{min-height:var(--tap);padding:0 20px;border:0;border-radius:22px;background:var(--gold);color:var(--on-gold);font-weight:600;font-size:var(--t-sub)}
+.bar button:disabled{opacity:.38;cursor:default}
 </style>
 </head>
 <body>
@@ -62,29 +128,54 @@ footer{border-top:1px solid var(--line);background:var(--panel);padding:9px 16px
 <div id="auth">
   <div class="brand">
     <h1>Son<i>á</i>mbulos</h1>
-    <p>3 de octubre</p>
+    <p>Sábado 3 de octubre</p>
   </div>
 
-  <div class="tabs">
-    <button id="tabLogin" aria-selected="true">Iniciar sesión</button>
-    <button id="tabSignup" aria-selected="false">Crear cuenta</button>
+  <div class="seg" role="tablist" aria-label="Entrar o crear cuenta">
+    <button id="tabLogin" role="tab" aria-selected="true" aria-controls="loginForm">Iniciar sesión</button>
+    <button id="tabSignup" role="tab" aria-selected="false" aria-controls="signupForm">Crear cuenta</button>
   </div>
 
-  <div id="msg"></div>
+  <div id="msg" role="alert"></div>
 
-  <form id="loginForm">
-    <label>Teléfono<input id="lPhone" inputmode="tel" autocomplete="tel" placeholder="3001234567"></label>
-    <label>PIN<input id="lPin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="4 dígitos"></label>
+  <form id="loginForm" role="tabpanel" aria-labelledby="tabLogin">
+    <div class="group">
+      <div class="row">
+        <label for="lPhone">Teléfono</label>
+        <input id="lPhone" inputmode="tel" autocomplete="tel" placeholder="300 123 4567">
+      </div>
+      <div class="row">
+        <label for="lPin">PIN</label>
+        <input id="lPin" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="4 dígitos">
+      </div>
+    </div>
     <button class="primary" type="submit">Verificar</button>
     <p class="hint">Tu PIN confirma que la cuenta es tuya antes de mover monedas.</p>
   </form>
 
-  <form id="signupForm" hidden>
-    <label>Nombre de usuario<input id="sName" autocomplete="nickname" placeholder="Como quieres que te llamemos"></label>
-    <label>Teléfono<input id="sPhone" inputmode="tel" autocomplete="tel" placeholder="3001234567"></label>
-    <label>Correo<input id="sEmail" type="email" autocomplete="email" placeholder="tu@correo.com"></label>
-    <label>PIN<input id="sPin" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="4 dígitos"></label>
-    <label>Repite el PIN<input id="sPin2" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="4 dígitos"></label>
+  <form id="signupForm" role="tabpanel" aria-labelledby="tabSignup" hidden>
+    <div class="group">
+      <div class="row">
+        <label for="sName">Nombre</label>
+        <input id="sName" autocomplete="nickname" placeholder="Como quieres que te llamemos">
+      </div>
+      <div class="row">
+        <label for="sPhone">Teléfono</label>
+        <input id="sPhone" inputmode="tel" autocomplete="tel" placeholder="300 123 4567">
+      </div>
+      <div class="row">
+        <label for="sEmail">Correo</label>
+        <input id="sEmail" type="email" inputmode="email" autocomplete="email" placeholder="tu@correo.com">
+      </div>
+      <div class="row">
+        <label for="sPin">PIN</label>
+        <input id="sPin" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="Elige 4 dígitos">
+      </div>
+      <div class="row">
+        <label for="sPin2">Repite el PIN</label>
+        <input id="sPin2" type="password" inputmode="numeric" maxlength="4" autocomplete="new-password" placeholder="Los mismos 4 dígitos">
+      </div>
+    </div>
     <button class="primary" type="submit">Crear cuenta</button>
     <p class="hint">Anota tu PIN. Si lo olvidas, solo el tesorero puede darte uno nuevo.</p>
   </form>
@@ -92,17 +183,22 @@ footer{border-top:1px solid var(--line);background:var(--panel);padding:9px 16px
 
 <div id="app" hidden>
   <header>
-    <div class="me"><b id="myName">—</b><span id="myBalance">— monedas</span></div>
-    <div class="icons">
-      <button id="keyBtn" title="Clave de tesorero">CLAVE</button>
-      <button id="outBtn">Salir</button>
+    <div class="who">
+      <div class="name" id="myName">—</div>
+      <div class="bal"><span id="myBalance">0</span><span class="unit">monedas</span></div>
+    </div>
+    <div class="acts">
+      <button class="iconbtn" id="keyBtn">Clave</button>
+      <button class="iconbtn" id="outBtn">Salir</button>
     </div>
   </header>
-  <div id="log"></div>
+
+  <div id="log" role="log" aria-live="polite" aria-label="Conversación"></div>
+
   <footer>
     <div class="chips" id="chips"></div>
-    <div class="row">
-      <input id="input" placeholder="/send 5 tokens to @3001112233">
+    <div class="bar">
+      <input id="input" placeholder="/send 5 tokens to @3001112233" aria-label="Escribe un comando">
       <button id="sendBtn">Enviar</button>
     </div>
   </footer>
@@ -137,11 +233,18 @@ function post(path, payload) {
   });
 }
 
-/* ---------- Autenticación ---------- */
+/* El botón dice qué está pasando en vez de solo apagarse. */
+function busy(button, isBusy) {
+  if (!button.dataset.label) button.dataset.label = button.textContent;
+  button.disabled = isBusy;
+  button.textContent = isBusy ? 'Un momento…' : button.dataset.label;
+}
+
+/* ---------- Entrar / Crear cuenta ---------- */
 
 function notify(text, kind) {
-  $('msg').textContent = text;
-  $('msg').className = text ? 'show ' + kind : '';
+  $('msg').textContent = text || '';
+  $('msg').className = text ? kind : '';
 }
 
 function showTab(name) {
@@ -156,6 +259,70 @@ function showTab(name) {
 $('tabLogin').onclick = function () { showTab('login'); };
 $('tabSignup').onclick = function () { showTab('signup'); };
 
+/* Los campos de PIN solo aceptan dígitos: escribir letras en un campo
+   enmascarado es invisible hasta que el servidor rechaza el intento. */
+['lPin', 'sPin', 'sPin2'].forEach(function (id) {
+  $(id).addEventListener('input', function () {
+    this.value = this.value.replace(/\D/g, '');
+  });
+});
+
+/* El botón se habilita solo cuando están los datos requeridos, en vez de
+   dejar que la persona lo toque y reciba un error evitable. */
+function gate(form, isReady) {
+  var button = form.querySelector('.primary');
+  function update() { button.disabled = !isReady(); }
+  form.addEventListener('input', update);
+  update();
+}
+
+function digits(id) { return $(id).value.replace(/\D/g, ''); }
+
+gate($('loginForm'), function () {
+  return digits('lPhone').length >= 10 && digits('lPin').length === 4;
+});
+
+gate($('signupForm'), function () {
+  return $('sName').value.trim() && digits('sPhone').length >= 10 &&
+    $('sEmail').value.indexOf('@') > 0 && digits('sPin').length === 4 && digits('sPin2').length === 4;
+});
+
+async function submitForm(form, run) {
+  var button = form.querySelector('.primary');
+  busy(button, true);
+  notify('');
+  try {
+    await run();
+  } catch (error) {
+    notify(error.message, 'bad');
+  }
+  busy(button, false);
+}
+
+$('loginForm').onsubmit = function (event) {
+  event.preventDefault();
+  submitForm(this, async function () {
+    var session = await post('/api/login', { phone: $('lPhone').value, pin: $('lPin').value });
+    $('lPin').value = '';
+    enterApp(session);
+  });
+};
+
+$('signupForm').onsubmit = function (event) {
+  event.preventDefault();
+  submitForm(this, async function () {
+    if ($('sPin').value !== $('sPin2').value) throw new Error('Los dos PIN no coinciden.');
+    var session = await post('/api/signup', {
+      name: $('sName').value,
+      phone: $('sPhone').value,
+      email: $('sEmail').value,
+      pin: $('sPin').value
+    });
+    $('sPin').value = $('sPin2').value = '';
+    enterApp(session);
+  });
+};
+
 function enterApp(session) {
   token = session.token || token;
   if (session.token) store('sb.token', session.token);
@@ -165,12 +332,14 @@ function enterApp(session) {
   $('auth').hidden = true;
   $('app').hidden = false;
   $('input').focus();
-  if (!$('log').childElementCount) say('bot', '👋 Hola ' + session.user.name + '. Escribe /help para ver qué puedes hacer.');
+  if (!$('log').childElementCount) {
+    say('bot', '👋 Hola ' + session.user.name + '. Escribe /help para ver qué puedes hacer.');
+  }
 }
 
 function paintUser(user) {
   $('myName').textContent = user.name;
-  $('myBalance').textContent = user.balance + ' monedas';
+  $('myBalance').textContent = user.balance;
 }
 
 /* Vuelve a la pantalla de verificación conservando el teléfono, para que solo
@@ -183,46 +352,10 @@ function signOut(reason) {
   showTab('login');
   $('lPhone').value = store('sb.phone') || '';
   $('lPin').value = '';
+  $('loginForm').dispatchEvent(new Event('input'));
   if (reason) notify(reason, 'bad');
   $('lPin').focus();
 }
-
-async function submitForm(form, button, run) {
-  button.disabled = true;
-  notify('');
-  try {
-    await run();
-  } catch (error) {
-    notify(error.message, 'bad');
-  }
-  button.disabled = false;
-}
-
-$('loginForm').onsubmit = function (event) {
-  event.preventDefault();
-  var button = this.querySelector('.primary');
-  submitForm(this, button, async function () {
-    var session = await post('/api/login', { phone: $('lPhone').value, pin: $('lPin').value });
-    $('lPin').value = '';
-    enterApp(session);
-  });
-};
-
-$('signupForm').onsubmit = function (event) {
-  event.preventDefault();
-  var button = this.querySelector('.primary');
-  submitForm(this, button, async function () {
-    if ($('sPin').value !== $('sPin2').value) throw new Error('Los dos PIN no coinciden.');
-    var session = await post('/api/signup', {
-      name: $('sName').value,
-      phone: $('sPhone').value,
-      email: $('sEmail').value,
-      pin: $('sPin').value
-    });
-    $('sPin').value = $('sPin2').value = '';
-    enterApp(session);
-  });
-};
 
 /* ---------- Consola ---------- */
 
@@ -237,8 +370,8 @@ function say(kind, text) {
 function adminKey(value) {
   if (value !== undefined) store('sb.key', value);
   var key = store('sb.key') || '';
-  $('keyBtn').textContent = key ? 'TESORERO' : 'CLAVE';
-  $('keyBtn').className = key ? 'armed' : '';
+  $('keyBtn').textContent = key ? 'Tesorero' : 'Clave';
+  $('keyBtn').className = 'iconbtn' + (key ? ' armed' : '');
   return key;
 }
 
@@ -260,12 +393,13 @@ async function send(text, isRetry) {
   if (!text) return;
   if (!isRetry) say('mine', text);
   $('input').value = '';
-  $('sendBtn').disabled = true;
+  busy($('sendBtn'), true);
 
   try {
     var reply = await post('/webhook/sms', { Body: text, token: token, adminKey: adminKey() });
 
     if (reply.locked && reply.reason === 'auth') {
+      busy($('sendBtn'), false);
       signOut('Tu sesión expiró. Verifica tu PIN para seguir.');
       return;
     }
@@ -274,7 +408,7 @@ async function send(text, isRetry) {
       var typed = prompt('Clave de tesorero:');
       if (typed) {
         adminKey(typed);
-        $('sendBtn').disabled = false;
+        busy($('sendBtn'), false);
         return send(text, true);
       }
     }
@@ -285,7 +419,7 @@ async function send(text, isRetry) {
     say('bot bad', 'No se pudo alcanzar el bot.');
   }
 
-  $('sendBtn').disabled = false;
+  busy($('sendBtn'), false);
   $('input').focus();
 }
 
@@ -308,6 +442,7 @@ $('input').onkeydown = function (event) {
    persona sin querer. El formato se enseña en el placeholder. */
 ['/balance', '/history', '/help'].forEach(function (command) {
   var chip = document.createElement('button');
+  chip.className = 'chip';
   chip.textContent = command;
   chip.onclick = function () { $('input').value = command; $('input').focus(); };
   $('chips').appendChild(chip);
@@ -318,6 +453,7 @@ $('input').onkeydown = function (event) {
 (async function () {
   adminKey();
   $('lPhone').value = store('sb.phone') || '';
+  $('loginForm').dispatchEvent(new Event('input'));
 
   var saved = store('sb.token');
   if (!saved) return;
