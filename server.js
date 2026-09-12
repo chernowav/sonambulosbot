@@ -52,4 +52,7 @@ async function main() {
   return app;
 }
 
-module.exports = main();
+module.exports = main().catch((error) => {
+  console.error(`❌ No se pudo arrancar: ${error.message}`);
+  process.exit(1);
+});
