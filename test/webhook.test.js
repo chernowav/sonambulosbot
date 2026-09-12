@@ -63,7 +63,7 @@ test('takes the identity from the token and ignores the phone in the body', asyn
   const { handleIncoming, store, sessions, account } = setup();
   await account('3000000001', 'Dueño');
   await account('3000000002', 'Otro');
-  store._debug.users.get('3000000001').balance = 10;
+  store._debug.users.get('3000000001').balanceLuna = 10;
 
   // El body dice ser el usuario 1, pero el token es del usuario 2: quien
   // paga tiene que ser el del token, si no cualquiera vaciaría cuentas ajenas.
@@ -74,8 +74,8 @@ test('takes the identity from the token and ignores the phone in the body', asyn
   });
 
   assert.equal(res.body.phoneNumber, '3000000002');
-  assert.match(res.body.response, /Saldo insuficiente/);
-  assert.equal(store._debug.users.get('3000000001').balance, 10);
+  assert.match(res.body.response, /No tienes suficiente Luna/);
+  assert.equal(store._debug.users.get('3000000001').balanceLuna, 10);
 });
 
 test('locks commands when the token expired', async () => {
@@ -112,7 +112,7 @@ test('allows /emit through with a session and the correct adminKey', async () =>
     adminKey: 'secret123',
   });
 
-  assert.match(res.body.response, /Emitidas 5 monedas/);
+  assert.match(res.body.response, /Recargadas 5 Luna/);
 });
 
 test('rejects an empty message', async () => {
@@ -171,7 +171,7 @@ test('the Spanish name works once the key is given', async () => {
     adminKey: 'secret123',
   });
 
-  assert.match(res.body.response, /Emitidas 5 monedas/);
+  assert.match(res.body.response, /Recargadas 5 Luna/);
 });
 
 test('/ayuda answers without a session, same as /help', async () => {
@@ -186,13 +186,13 @@ test('/saldo and /enviar reach the same commands as their English names', async 
   const { handleIncoming, store, sessions, account } = setup();
   await account('3000000001', 'Ana');
   await account('3000000002', 'Beto');
-  store._debug.users.get('3000000001').balance = 10;
+  store._debug.users.get('3000000001').balanceLuna = 10;
   const token = sessions.issue('3000000001');
 
   const saldo = await run(handleIncoming, { Body: '/saldo', token });
-  assert.match(saldo.body.response, /Tu saldo: 10 monedas/);
+  assert.match(saldo.body.response, /Luna: 10/);
 
   const enviar = await run(handleIncoming, { Body: '/enviar @3000000002 4', token });
-  assert.match(enviar.body.response, /Transferencia completada/);
-  assert.equal(store._debug.users.get('3000000002').balance, 4);
+  assert.match(enviar.body.response, /Enviaste \d+ Luna/);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 4);
 });

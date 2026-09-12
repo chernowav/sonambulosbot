@@ -1,6 +1,13 @@
 const { canonico } = require('../utils/comandos');
 
-const ADMIN_LOCKED_COMMANDS = new Set(['emit', 'users', 'content', 'resetpin']);
+const ADMIN_LOCKED_COMMANDS = new Set([
+  'emit',
+  'recarga',
+  'entrada',
+  'users',
+  'content',
+  'resetpin',
+]);
 
 // Lo único que se puede pedir sin haber iniciado sesión.
 const PUBLIC_COMMANDS = new Set(['help']);

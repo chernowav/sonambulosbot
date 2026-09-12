@@ -4,6 +4,32 @@ Sistema de monedas digitales para el evento Piso 26, construido con Node.js y Mo
 
 **Evento:** sábado 3 de octubre de 2026
 
+## Las dos monedas
+
+**Sol** es la entrada al evento e incluye una bebida. Se vende una por persona
+y por noche (`/entrada`), no se puede recomprar, no se le pasa a nadie y vence
+a las 24 horas. Contar Soles emitidas es contar entradas vendidas, y por eso
+`venderEntrada` exige `balanceSol: 0`: sin esa condición, vender dos veces a la
+misma persona falsearía la cifra de la que depende toda la taquilla.
+
+**Luna** se compra aparte (`/recarga`), no vence y es la que circula: se pasa
+entre personas y se gasta en el bar.
+
+Al pagar se gasta **primero la Sol**, porque es la que vence: gastar Luna
+teniendo Sol a punto de morir es quemarle plata a la persona. Ambas salen en
+una sola operación de Mongo — hacerlo en dos pasos dejaría una ventana en la
+que un segundo pago simultáneo vería saldos a medio actualizar.
+
+En el bar la Sol se **canja** y la Luna se **transfiere**: la Sol es un vale de
+bebida y al usarlo se consume, mientras la Luna entra a la caja del bar.
+
+El vencimiento se guarda como una sola fecha por persona, no una por cada
+emisión. Llevar lotes separados obligaría a abandonar el decremento atómico que
+impide que dos pagos simultáneos en la barra dejen el saldo en negativo; recibir
+Sol extra estira el reloj de toda la Sol, que en una sola noche es un mal mucho
+menor. La Sol vencida **queda registrada en el libro** como un movimiento más:
+si se evaporara en silencio, las cuentas públicas dejarían de cuadrar.
+
 ## El libro público
 
 Cada movimiento de monedas se encadena con el anterior mediante un hash

@@ -59,13 +59,52 @@ function createCommands(store, config, canales = {}) {
     const user = await store.setName(phoneNumber, name);
     if (!user) return '❌ Usuario no registrado.';
 
-    return `✅ Ahora te llamamos: ${user.name}\n💰 Tu saldo: ${user.balance} monedas`;
+    return `✅ Ahora te llamamos: ${user.name}`;
   };
 
+  // La Sol vencida se barre antes de mostrar o mover nada, y el vencimiento
+  // queda anotado en el libro. Si se evaporara en silencio, las cuentas
+  // públicas dejarían de cuadrar y el libro perdería su razón de ser.
+  async function barrerSol(phoneNumber) {
+    const barrido = await store.barrerSolVencida(phoneNumber);
+    if (!barrido) return null;
+
+    await store.recordTransaction({
+      from: phoneNumber,
+      to: 'VENCIMIENTO',
+      fromLabel: etiqueta(barrido.user),
+      toLabel: 'VENCIMIENTO',
+      amount: barrido.vencio,
+      moneda: 'sol',
+      action: 'expiry',
+      description: `Venció la Sol de ${barrido.user.name}`,
+    });
+
+    return barrido;
+  }
+
+  function comoQuedaste(user) {
+    const sol = user.balanceSol
+      ? `☀️ Sol: ${user.balanceSol} (tu entrada, incluye una bebida)\n`
+      : '';
+    return `${sol}🌙 Luna: ${user.balanceLuna}`;
+  }
+
   commands.balance = async (phoneNumber) => {
+    await barrerSol(phoneNumber);
+
     const user = await store.getUser(phoneNumber);
-    if (!user) return '❌ Usuario no registrado. Usa /register [nombre]';
-    return `💰 Tu saldo: ${user.balance} monedas\n📱 Teléfono: ${phoneNumber}`;
+    if (!user) return '❌ Usuario no registrado.';
+
+    let msg = `💰 Tu saldo:\n${comoQuedaste(user)}`;
+    if (user.balanceSol && user.solExpiraEn) {
+      const vence = new Date(user.solExpiraEn).toLocaleString('es-CO', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+      });
+      msg += `\n\n⏳ Tu Sol vence el ${vence}. Después de esa hora se pierde.`;
+    }
+
+    return msg;
   };
 
   commands.history = async (phoneNumber) => {
@@ -105,7 +144,13 @@ function createCommands(store, config, canales = {}) {
     const result = await store.transfer(phoneNumber, toPhone, amount);
     if (!result.ok) {
       if (result.reason === 'not_registered') return '❌ No estás registrado.';
-      return `❌ Saldo insuficiente. Tienes: ${result.fromUser ? result.fromUser.balance : 0}`;
+      // Se nombra la Luna a propósito: alguien con Sol suficiente pero sin
+      // Luna se quedaría mirando "saldo insuficiente" sin entender por qué,
+      // teniendo monedas en pantalla.
+      return (
+        `❌ No tienes suficiente Luna. Tienes: ${result.fromUser ? result.fromUser.balanceLuna : 0}\n` +
+        '☀️ La Sol es tu entrada: se gasta en el bar, no se le pasa a nadie.'
+      );
     }
 
     // El saldo ya se movió. Si el libro no alcanza a registrarlo, las monedas
@@ -120,9 +165,10 @@ function createCommands(store, config, canales = {}) {
         fromLabel: etiqueta(result.fromUser),
         toLabel: etiqueta(result.toUser),
         amount,
+        moneda: 'luna',
         coinIds: [],
         action: 'transfer',
-        description: `Transferencia de ${amount} monedas de ${result.fromUser.name} a ${result.toUser.name}`,
+        description: `${result.fromUser.name} le envió ${amount} Luna a ${result.toUser.name}`,
       });
     } catch (error) {
       await store.transfer(toPhone, phoneNumber, amount);
@@ -134,17 +180,17 @@ function createCommands(store, config, canales = {}) {
     // envía tiene tanto derecho a un comprobante como quien recibe.
     avisar(
       result.toUser,
-      `${config.botName}: recibiste ${amount} monedas de ${result.fromUser.name}. ` +
-        `Tu saldo: ${result.toUser.balance}. Movimiento #${entry.index} en el libro público.`
+      `${config.botName}: recibiste ${amount} Luna de ${result.fromUser.name}. ` +
+        `Tu Luna: ${result.toUser.balanceLuna}. Movimiento #${entry.index} en el libro público.`
     );
 
     avisar(
       result.fromUser,
-      `${config.botName}: enviaste ${amount} monedas a ${result.toUser.name}. ` +
-        `Tu saldo: ${result.fromUser.balance}. Movimiento #${entry.index} en el libro público.`
+      `${config.botName}: enviaste ${amount} Luna a ${result.toUser.name}. ` +
+        `Tu Luna: ${result.fromUser.balanceLuna}. Movimiento #${entry.index} en el libro público.`
     );
 
-    return `✅ Transferencia completada!\n📤 Enviaste: ${amount} monedas\n💰 Tu nuevo saldo: ${result.fromUser.balance}\n🔗 Movimiento #${entry.index} en el libro`;
+    return `✅ Enviaste ${amount} Luna a ${result.toUser.name}\n🌙 Te quedan: ${result.fromUser.balanceLuna}\n🔗 Movimiento #${entry.index} en el libro`;
   };
 
   commands.send = async (phoneNumber, args) => {
@@ -154,74 +200,136 @@ function createCommands(store, config, canales = {}) {
     return commands.transfer(phoneNumber, [parsed.target, String(parsed.amount)]);
   };
 
-  // Emite a una persona o a varias de una vez:
-  //   /emit @3001112233 10
-  //   /emit @3001112233 @3004445566 @3007778899 10
-  //
-  // Lo segundo existe porque en la puerta del evento el tesorero tiene una
-  // fila enfrente, y emitir de a una persona por comando lo vuelve el cuello
-  // de botella de la noche.
-  commands.emit = async (phoneNumber, args) => {
-    const user = await store.getUser(phoneNumber);
-    if (!user || !user.isAdmin) return '❌ No tienes permisos de admin.';
-
+  // Lee la lista de destinos de un comando de tesorero. Acepta varios a la
+  // vez porque en la puerta hay una fila enfrente y uno por comando vuelve al
+  // tesorero el cuello de botella de la noche.
+  function leerDestinos(args) {
     const etiquetados = args.filter((a) => a.startsWith('@'));
-    const resto = args.filter((a) => !a.startsWith('@'));
+    const crudos = etiquetados.length
+      ? etiquetados.map((a) => a.replace('@', ''))
+      : [args[0] || ''];
 
-    // Con @ se admiten varios destinos; sin @ se conserva la forma posicional
-    // de siempre (/emit 3001112233 10) para no romper lo que ya se usaba.
-    const crudos = etiquetados.length ? etiquetados.map((a) => a.replace('@', '')) : [args[0] || ''];
-    const invalidos = crudos.filter((a) => !isValidPhone(a));
-    const destinos = crudos.filter(isValidPhone).map(normalizePhone);
+    return {
+      invalidos: crudos.filter((a) => !isValidPhone(a)),
+      // Sin el Set, repetir un número en la lista le cobraría dos veces.
+      destinos: Array.from(new Set(crudos.filter(isValidPhone).map(normalizePhone))),
+      resto: args.filter((a) => !a.startsWith('@')),
+    };
+  }
 
-    const amount = parseAmount(etiquetados.length ? resto[0] : args[1]);
-    const eventId = (etiquetados.length ? resto[1] : args[2]) || config.defaultEventId;
+  // Vende entradas: una Sol por persona. Contar Soles emitidas es contar
+  // entradas vendidas, así que nadie puede recibir dos.
+  //
+  //   /entrada @3001112233
+  //   /entrada @3001112233 @3004445566 @3007778899
+  commands.entrada = async (phoneNumber, args) => {
+    const admin = await store.getUser(phoneNumber);
+    if (!admin || !admin.isAdmin) return '❌ No tienes permisos de admin.';
 
-    if (!destinos.length) return '❌ Formato: /emit @usuario [@usuario2 ...] X';
-    // Se corta antes de emitir nada: emitirle a los buenos y avisar de los
-    // malos después dejaría al tesorero sin saber a quién le quedó faltando.
+    const { destinos, invalidos } = leerDestinos(args);
+
+    if (!destinos.length) return '❌ Formato: /entrada @numero [@numero2 ...]';
     if (invalidos.length) {
-      return `❌ Estos números no tienen 10 dígitos: ${invalidos.join(', ')}. No se emitió nada.`;
+      return `❌ Estos números no tienen 10 dígitos: ${invalidos.join(', ')}. No se vendió nada.`;
+    }
+
+    const vendidas = [];
+    const repetidas = [];
+
+    for (const toPhone of destinos) {
+      const venta = await store.venderEntrada(toPhone, config.horasVigenciaSol);
+
+      // Una entrada por persona por noche: si ya tiene su Sol, se avisa en vez
+      // de venderle otra.
+      if (!venta.ok) {
+        repetidas.push(toPhone);
+        continue;
+      }
+
+      const entry = await store.recordTransaction({
+        from: 'TESORERIA',
+        to: toPhone,
+        fromLabel: 'TESORERIA',
+        toLabel: etiqueta(venta.user),
+        amount: 1,
+        moneda: 'sol',
+        action: 'entrada',
+        description: `Entrada vendida a ${venta.user.name}`,
+        eventId: config.defaultEventId,
+      });
+
+      avisar(
+        venta.user,
+        `${config.botName}: tu entrada quedó registrada. Incluye una bebida — ` +
+          `pídela en el bar con tu ☀️ Sol. Vence en 24 horas. ` +
+          `Movimiento #${entry.index} en el libro público.`
+      );
+
+      vendidas.push({ user: venta.user, entry });
+    }
+
+    let msg = vendidas.length
+      ? `✅ ${vendidas.length} entrada(s) vendida(s):\n` +
+        vendidas.map((v) => `• ${v.user.name} (#${v.entry.index})`).join('\n')
+      : '⚠️ No se vendió ninguna entrada.';
+
+    if (repetidas.length) {
+      msg += `\n\n⚠️ Ya tenían entrada: ${repetidas.map((p) => `@${p.slice(-4)}`).join(', ')}`;
+    }
+
+    return msg;
+  };
+
+  // Recarga Luna, que es la que se compra y no vence.
+  //
+  //   /recarga @3001112233 50
+  //   /recarga @3001112233 @3004445566 50
+  commands.recarga = async (phoneNumber, args) => {
+    const admin = await store.getUser(phoneNumber);
+    if (!admin || !admin.isAdmin) return '❌ No tienes permisos de admin.';
+
+    const { destinos, invalidos, resto } = leerDestinos(args);
+    const amount = parseAmount(destinos.length && args.some((a) => a.startsWith('@')) ? resto[0] : args[1]);
+
+    if (!destinos.length) return '❌ Formato: /recarga @numero [@numero2 ...] X';
+    if (invalidos.length) {
+      return `❌ Estos números no tienen 10 dígitos: ${invalidos.join(', ')}. No se recargó nada.`;
     }
     if (Number.isNaN(amount)) return '❌ Cantidad debe ser número > 0';
 
-    // Sin esto, repetir un número en la lista le emitiría dos veces.
-    const unicos = Array.from(new Set(destinos));
     const hechas = [];
 
-    for (const toPhone of unicos) {
-      const { toUser, coinIds } = await store.emitCoins(toPhone, amount, eventId);
+    for (const toPhone of destinos) {
+      const { user: toUser } = await store.recargarLuna(toPhone, amount);
 
       let entry;
       try {
         entry = await store.recordTransaction({
-          from: 'TESORERO',
+          from: 'TESORERIA',
           to: toPhone,
-          fromLabel: 'TESORERO',
+          fromLabel: 'TESORERIA',
           toLabel: etiqueta(toUser),
           amount,
-          coinIds,
-          action: 'emission',
-          description: `Tesorero emitió ${amount} monedas a ${toUser.name}`,
-          eventId,
+          moneda: 'luna',
+          action: 'recarga',
+          description: `Recarga de ${amount} Luna a ${toUser.name}`,
+          eventId: config.defaultEventId,
         });
       } catch (error) {
-        // Igual que en /transfer: monedas que no quedan en el libro no pueden
-        // quedar en el saldo. Se devuelven las de esta persona y se corta, con
-        // el detalle de a quiénes sí alcanzó — en medio del evento el tesorero
-        // necesita saber exactamente por dónde retomar.
-        await store.transfer(toPhone, 'TESORERO', amount).catch(() => {});
-        console.error(`Emisión revertida para ${toPhone}: ${error.message}`);
+        // Monedas que no quedan en el libro no pueden quedar en el saldo. Se
+        // devuelven las de esta persona y se corta, diciendo a quiénes sí
+        // alcanzó: en medio del evento el tesorero necesita saber exactamente
+        // por dónde retomar.
+        await store.recargarLuna(toPhone, -amount).catch(() => {});
+        console.error(`Recarga revertida para ${toPhone}: ${error.message}`);
 
         const yaHechas = hechas.map((h) => h.toUser.name).join(', ') || 'nadie';
-        return `❌ El libro no aceptó la emisión a ${toUser.name}; se revirtió.
-✅ Alcanzaron a recibir: ${yaHechas}.
-Vuelve a emitir solo a los que faltan.`;
+        return `❌ El libro no aceptó la recarga a ${toUser.name}; se revirtió.\n✅ Alcanzaron a recibir: ${yaHechas}.\nVuelve a recargar solo a los que faltan.`;
       }
 
       avisar(
         toUser,
-        `${config.botName}: te emitieron ${amount} monedas. Tu saldo: ${toUser.balance}. ` +
+        `${config.botName}: te recargaron ${amount} 🌙 Luna. Tu Luna: ${toUser.balanceLuna}. ` +
           `Movimiento #${entry.index} en el libro público.`
       );
 
@@ -230,16 +338,19 @@ Vuelve a emitir solo a los que faltan.`;
 
     if (hechas.length === 1) {
       const { toUser, entry } = hechas[0];
-      return `✅ Emitidas ${amount} monedas a ${toUser.name}\n📊 Nuevo saldo: ${toUser.balance}\n🔗 Movimiento #${entry.index} en el libro`;
+      return `✅ Recargadas ${amount} Luna a ${toUser.name}\n🌙 Su Luna: ${toUser.balanceLuna}\n🔗 Movimiento #${entry.index} en el libro`;
     }
 
-    let msg = `✅ Emitidas ${amount} monedas a ${hechas.length} personas (${amount * hechas.length} en total):\n`;
+    let msg = `✅ Recargadas ${amount} Luna a ${hechas.length} personas (${amount * hechas.length} en total):\n`;
     hechas.forEach(({ toUser, entry }) => {
-      msg += `• ${toUser.name} → ${toUser.balance} monedas (#${entry.index})\n`;
+      msg += `• ${toUser.name} → ${toUser.balanceLuna} Luna (#${entry.index})\n`;
     });
 
     return msg.trimEnd();
   };
+
+  // /emitir sigue existiendo y significa recargar Luna, que es lo que hacía.
+  commands.emit = (...args) => commands.recarga(...args);
 
   // /content [link] @artista1 @artista2 ... — el productor pega el link ya
   // editado y etiqueta a todos los talentos capturados en esa locación; cada
@@ -288,7 +399,7 @@ Vuelve a emitir solo a los que faltan.`;
     const users = await store.listUsers();
     let msg = '👥 Usuarios registrados:\n';
     users.forEach((u, i) => {
-      msg += `${i + 1}. ${u.name} (@${u.phoneNumber.slice(-4)}) — ${u.balance} monedas\n`;
+      msg += `${i + 1}. ${u.name} (@${u.phoneNumber.slice(-4)}) — ☀️ ${u.balanceSol || 0} Sol · 🌙 ${u.balanceLuna || 0} Luna\n`;
     });
     return msg;
   };
@@ -300,17 +411,19 @@ Vuelve a emitir solo a los que faltan.`;
     const isAdmin = user?.isAdmin;
 
     let msg = `📖 Comandos de ${config.botName}:\n\n`;
-    msg += '/saldo — Ver cuántas monedas tienes\n';
-    msg += '/bar X — Pagar X monedas en el bar\n';
-    msg += '/enviar 5 @numero — Enviarle monedas (el orden da igual)\n';
+    msg += '☀️ Sol = tu entrada, incluye una bebida. Vence en 24h.\n';
+    msg += '🌙 Luna = la que recargas. No vence.\n\n';
+    msg += '/saldo — Ver tus Soles y Lunas\n';
+    msg += '/bar X — Pagar en el bar (gasta la Sol primero)\n';
+    msg += '/enviar 5 @numero — Pasarle Luna a alguien (la Sol no se pasa)\n';
     msg += '/historial — Tus últimos movimientos\n';
     msg += '/nombre [como te llamas] — Cambiar tu nombre\n';
     msg += '/ayuda — Esta lista\n';
 
     if (isAdmin) {
       msg += '\n👑 Tesorero (piden la clave):\n';
-      msg += '/emitir @numero X — Emitir monedas\n';
-      msg += '/emitir @uno @dos @tres X — Emitir a varios de una vez\n';
+      msg += '/entrada @numero [@numero2 ...] — Vender entradas (1 Sol c/u)\n';
+      msg += '/recarga @numero [@numero2 ...] X — Vender Luna\n';
       msg += '/usuarios — Ver la lista de gente\n';
       msg += '/contenido [link] @talento1 @talento2 — Publicar en sus Universos\n';
       msg += '/nuevopin @numero — Darle un PIN nuevo a quien lo olvidó\n';
@@ -327,9 +440,67 @@ Vuelve a emitir solo a los que faltan.`;
     }
 
     const amount = parseAmount(args[0]);
-    if (Number.isNaN(amount)) return '❌ Formato: /bar X — cuántas monedas pagas.';
+    if (Number.isNaN(amount)) return '❌ Formato: /bar X — cuánto pagas.';
 
-    return commands.transfer(phoneNumber, [`@${config.barPhone}`, String(amount)]);
+    await barrerSol(phoneNumber);
+
+    // Gasta Sol primero y Luna después, en una sola operación atómica.
+    const pago = await store.pagar(phoneNumber, amount);
+    if (!pago.ok) {
+      if (pago.reason === 'not_registered') return '❌ No estás registrado.';
+      const u = pago.user;
+      return `❌ No te alcanza. Tienes ☀️ ${u ? u.balanceSol : 0} Sol y 🌙 ${u ? u.balanceLuna : 0} Luna.`;
+    }
+
+    const bar = await store.getUser(config.barPhone);
+    const nombreBar = bar ? bar.name : 'el bar';
+    const movimientos = [];
+
+    // La Sol se canjea, no se transfiere: es un vale de bebida y al usarlo se
+    // consume. La Luna sí cambia de manos y entra a la caja del bar.
+    if (pago.usadoSol) {
+      const entry = await store.recordTransaction({
+        from: phoneNumber,
+        to: 'BAR',
+        fromLabel: etiqueta(pago.user),
+        toLabel: nombreBar,
+        amount: pago.usadoSol,
+        moneda: 'sol',
+        action: 'canje',
+        description: `${pago.user.name} canjeó su bebida incluida`,
+      });
+      movimientos.push(entry.index);
+    }
+
+    if (pago.usadoLuna) {
+      const { user: barUser } = await store.recargarLuna(config.barPhone, pago.usadoLuna);
+      const entry = await store.recordTransaction({
+        from: phoneNumber,
+        to: config.barPhone,
+        fromLabel: etiqueta(pago.user),
+        toLabel: etiqueta(barUser),
+        amount: pago.usadoLuna,
+        moneda: 'luna',
+        action: 'consumo',
+        description: `${pago.user.name} pagó ${pago.usadoLuna} Luna en el bar`,
+      });
+      movimientos.push(entry.index);
+    }
+
+    avisar(
+      pago.user,
+      `${config.botName}: pagaste ${amount} en el bar` +
+        (pago.usadoSol ? ` (☀️ ${pago.usadoSol} Sol` + (pago.usadoLuna ? ` + 🌙 ${pago.usadoLuna} Luna)` : ')') : '') +
+        `. Te queda: ☀️ ${pago.user.balanceSol} Sol, 🌙 ${pago.user.balanceLuna} Luna.`
+    );
+
+    let msg = '✅ Pagado en el bar\n';
+    if (pago.usadoSol) msg += `☀️ ${pago.usadoSol} Sol (tu bebida incluida)\n`;
+    if (pago.usadoLuna) msg += `🌙 ${pago.usadoLuna} Luna\n`;
+    msg += `\nTe queda: ☀️ ${pago.user.balanceSol} Sol · 🌙 ${pago.user.balanceLuna} Luna`;
+    msg += `\n🔗 Movimiento${movimientos.length > 1 ? 's' : ''} #${movimientos.join(', #')} en el libro`;
+
+    return msg;
   };
 
   // Los nombres en español apuntan a las mismas funciones, no son copias: si

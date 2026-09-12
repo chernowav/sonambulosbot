@@ -50,10 +50,12 @@ function createMongoStore({ treasurerPhone }) {
   // balance >= amount. La versión anterior leía el balance, lo restaba en
   // memoria y guardaba, lo que permitía a dos requests concurrentes leer el
   // mismo saldo y dejarlo en negativo.
+  // Transferir entre personas es siempre en Luna: la Sol es la entrada, no se
+  // pasa a nadie.
   async function transfer(fromPhone, toPhone, amount) {
     const fromUser = await User.findOneAndUpdate(
-      { phoneNumber: fromPhone, balance: { $gte: amount } },
-      { $inc: { balance: -amount }, $set: { updatedAt: new Date() } },
+      { phoneNumber: fromPhone, balanceLuna: { $gte: amount } },
+      { $inc: { balanceLuna: -amount }, $set: { updatedAt: new Date() } },
       { new: true }
     );
 
@@ -68,16 +70,107 @@ function createMongoStore({ treasurerPhone }) {
 
     let toUser = await User.findOneAndUpdate(
       { phoneNumber: toPhone },
-      { $inc: { balance: amount }, $set: { updatedAt: new Date() } },
+      { $inc: { balanceLuna: amount }, $set: { updatedAt: new Date() } },
       { new: true }
     );
     if (!toUser) {
       toUser = await getOrCreateUser(toPhone);
-      toUser.balance += amount;
+      toUser.balanceLuna += amount;
       await toUser.save();
     }
 
     return { ok: true, fromUser, toUser };
+  }
+
+  // Vende una entrada: una Sol, una sola vez por persona y por noche.
+  async function venderEntrada(phoneNumber, horasVigencia = 24) {
+    await getOrCreateUser(phoneNumber);
+
+    const expira = new Date(Date.now() + horasVigencia * 60 * 60 * 1000);
+
+    // La condición balanceSol: 0 es lo que impide vender dos entradas a la
+    // misma persona: si ya tiene su Sol, el update no encuentra a nadie.
+    const user = await User.findOneAndUpdate(
+      { phoneNumber, balanceSol: { $lte: 0 } },
+      { $set: { balanceSol: 1, solExpiraEn: expira, updatedAt: new Date() } },
+      { new: true }
+    );
+
+    if (!user) return { ok: false, reason: 'ya_tiene_entrada' };
+    return { ok: true, user };
+  }
+
+  async function recargarLuna(phoneNumber, amount) {
+    await getOrCreateUser(phoneNumber);
+
+    const user = await User.findOneAndUpdate(
+      { phoneNumber },
+      { $inc: { balanceLuna: amount }, $set: { updatedAt: new Date() } },
+      { new: true }
+    );
+
+    return { ok: true, user };
+  }
+
+  // Pagar en el bar gasta primero la Sol, porque vence: gastar Luna teniendo
+  // Sol a punto de morir es quemarle plata a la persona.
+  //
+  // Todo ocurre en una sola operación de Mongo. Hacerlo en dos (descontar Sol,
+  // luego Luna) dejaría una ventana en la que un segundo pago simultáneo vería
+  // saldos a medio actualizar.
+  async function pagar(phoneNumber, amount) {
+    const antes = await User.findOneAndUpdate(
+      {
+        phoneNumber,
+        $expr: { $gte: [{ $add: ['$balanceSol', '$balanceLuna'] }, amount] },
+      },
+      [
+        { $set: { _usadoSol: { $min: ['$balanceSol', amount] } } },
+        {
+          $set: {
+            balanceSol: { $subtract: ['$balanceSol', '$_usadoSol'] },
+            balanceLuna: {
+              $subtract: ['$balanceLuna', { $subtract: [amount, '$_usadoSol'] }],
+            },
+            updatedAt: new Date(),
+          },
+        },
+        { $unset: '_usadoSol' },
+      ],
+      { new: false } // el documento previo dice cómo quedó repartido el pago
+    );
+
+    if (!antes) {
+      const existing = await User.findOne({ phoneNumber });
+      return {
+        ok: false,
+        reason: existing ? 'insufficient_funds' : 'not_registered',
+        user: existing,
+      };
+    }
+
+    const usadoSol = Math.min(antes.balanceSol, amount);
+    const usadoLuna = amount - usadoSol;
+    const user = await User.findOne({ phoneNumber });
+
+    return { ok: true, user, usadoSol, usadoLuna };
+  }
+
+  // La Sol vencida se barre al leer a la persona. Devuelve cuánta se perdió
+  // para que quien llame lo registre en el libro: si se evaporara en silencio,
+  // las cuentas del libro dejarían de cuadrar y perdería su razón de ser.
+  async function barrerSolVencida(phoneNumber) {
+    const user = await User.findOneAndUpdate(
+      {
+        phoneNumber,
+        balanceSol: { $gt: 0 },
+        solExpiraEn: { $lte: new Date() },
+      },
+      { $set: { balanceSol: 0 }, $unset: { solExpiraEn: '' } },
+      { new: false }
+    );
+
+    return user ? { vencio: user.balanceSol, user } : null;
   }
 
   async function emitCoins(toPhone, amount, eventId) {
@@ -96,7 +189,7 @@ function createMongoStore({ treasurerPhone }) {
     await getOrCreateUser(toPhone);
     const toUser = await User.findOneAndUpdate(
       { phoneNumber: toPhone },
-      { $inc: { balance: amount } },
+      { $inc: { balanceLuna: amount } },
       { new: true }
     );
 
@@ -311,10 +404,19 @@ function createMongoStore({ treasurerPhone }) {
     ]);
 
     const por = Object.fromEntries(filas.map((f) => [f._id, f]));
+    const suma = (accion) => (por[accion] ? por[accion].total : 0);
+    const cuantos = (accion) => (por[accion] ? por[accion].cuantos : 0);
 
     return {
-      emitido: por.emission ? por.emission.total : 0,
-      transferido: por.transfer ? por.transfer.total : 0,
+      // Cada entrada es una Sol, así que contarlas es contar tiquetes.
+      entradas: cuantos('entrada'),
+      lunaVendida: suma('recarga'),
+      transferido: suma('transfer'),
+      // Lo que entró al bar, separado por moneda: la Sol se canjeó (bebida
+      // incluida) y la Luna se pagó.
+      solCanjeada: suma('canje'),
+      lunaEnBar: suma('consumo'),
+      solVencida: suma('expiry'),
       movimientos: filas.reduce((n, f) => n + f.cuantos, 0),
     };
   }
@@ -371,6 +473,10 @@ function createMongoStore({ treasurerPhone }) {
     getUser,
     getOrCreateUser,
     transfer,
+    venderEntrada,
+    recargarLuna,
+    pagar,
+    barrerSolVencida,
     emitCoins,
     listUsers,
     recordTransaction,

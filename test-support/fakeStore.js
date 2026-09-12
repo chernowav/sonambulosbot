@@ -18,7 +18,9 @@ function createFakeStore({ treasurerPhone } = {}) {
     return {
       phoneNumber,
       name: name || `Usuario ${phoneNumber.slice(-4)}`,
-      balance: 0,
+      balanceSol: 0,
+      balanceLuna: 0,
+      solExpiraEn: null,
       isArtist: false,
       isAdmin: Boolean(treasurerPhone) && phoneNumber === treasurerPhone,
       pin: null,
@@ -43,10 +45,13 @@ function createFakeStore({ treasurerPhone } = {}) {
       return user;
     },
 
+    // Transferir entre personas es siempre en Luna: la Sol no se pasa.
     async transfer(fromPhone, toPhone, amount) {
       const fromUser = users.get(fromPhone);
       if (!fromUser) return { ok: false, reason: 'not_registered' };
-      if (fromUser.balance < amount) return { ok: false, reason: 'insufficient_funds', fromUser };
+      if (fromUser.balanceLuna < amount) {
+        return { ok: false, reason: 'insufficient_funds', fromUser };
+      }
 
       let toUser = users.get(toPhone);
       if (!toUser) {
@@ -54,9 +59,61 @@ function createFakeStore({ treasurerPhone } = {}) {
         users.set(toPhone, toUser);
       }
 
-      fromUser.balance -= amount;
-      toUser.balance += amount;
+      fromUser.balanceLuna -= amount;
+      toUser.balanceLuna += amount;
       return { ok: true, fromUser, toUser };
+    },
+
+    async venderEntrada(phoneNumber, horasVigencia = 24) {
+      let user = users.get(phoneNumber);
+      if (!user) {
+        user = makeUser(phoneNumber);
+        users.set(phoneNumber, user);
+      }
+
+      if (user.balanceSol > 0) return { ok: false, reason: 'ya_tiene_entrada' };
+
+      user.balanceSol = 1;
+      user.solExpiraEn = Date.now() + horasVigencia * 60 * 60 * 1000;
+      return { ok: true, user };
+    },
+
+    async recargarLuna(phoneNumber, amount) {
+      let user = users.get(phoneNumber);
+      if (!user) {
+        user = makeUser(phoneNumber);
+        users.set(phoneNumber, user);
+      }
+
+      user.balanceLuna += amount;
+      return { ok: true, user };
+    },
+
+    // Gasta primero la Sol, que es la que vence.
+    async pagar(phoneNumber, amount) {
+      const user = users.get(phoneNumber);
+      if (!user) return { ok: false, reason: 'not_registered' };
+      if (user.balanceSol + user.balanceLuna < amount) {
+        return { ok: false, reason: 'insufficient_funds', user };
+      }
+
+      const usadoSol = Math.min(user.balanceSol, amount);
+      const usadoLuna = amount - usadoSol;
+      user.balanceSol -= usadoSol;
+      user.balanceLuna -= usadoLuna;
+
+      return { ok: true, user, usadoSol, usadoLuna };
+    },
+
+    async barrerSolVencida(phoneNumber) {
+      const user = users.get(phoneNumber);
+      if (!user || !user.balanceSol || !user.solExpiraEn) return null;
+      if (user.solExpiraEn > Date.now()) return null;
+
+      const vencio = user.balanceSol;
+      user.balanceSol = 0;
+      user.solExpiraEn = null;
+      return { vencio, user };
     },
 
     async emitCoins(toPhone, amount, eventId) {
@@ -65,7 +122,7 @@ function createFakeStore({ treasurerPhone } = {}) {
         toUser = makeUser(toPhone);
         users.set(toPhone, toUser);
       }
-      toUser.balance += amount;
+      toUser.balanceLuna += amount;
       const coinIds = Array.from({ length: amount }, (_, i) => `coin_test_${toPhone}_${i}_${eventId}`);
       return { toUser, coinIds };
     },
@@ -113,9 +170,15 @@ function createFakeStore({ treasurerPhone } = {}) {
       const suma = (accion) =>
         conIndice.filter((t) => t.action === accion).reduce((n, t) => n + (t.amount || 0), 0);
 
+      const cuantos = (accion) => conIndice.filter((t) => t.action === accion).length;
+
       return {
-        emitido: suma('emission'),
+        entradas: cuantos('entrada'),
+        lunaVendida: suma('recarga'),
         transferido: suma('transfer'),
+        solCanjeada: suma('canje'),
+        lunaEnBar: suma('consumo'),
+        solVencida: suma('expiry'),
         movimientos: conIndice.length,
       };
     },

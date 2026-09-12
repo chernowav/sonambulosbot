@@ -43,7 +43,7 @@ async function setup(canales) {
 
   await account('3000000001', 'Ana');
   await account('3000000002', 'Beto');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
 
   return { store, commands };
 }
@@ -59,7 +59,7 @@ test('a linked person is reached on Telegram and not by paid SMS', async () => {
 
   const porTelegram = telegram.sent.find((m) => m.chatId === '555');
   assert.ok(porTelegram, 'Beto debió recibir el aviso por Telegram');
-  assert.match(porTelegram.text, /recibiste 4 monedas de Ana/);
+  assert.match(porTelegram.text, /recibiste 4 Luna de Ana/);
 
   // Y no se gastó un SMS con quien ya está en Telegram.
   assert.equal(sms.sent.some((m) => m.phoneNumber === '3000000002'), false);
@@ -77,7 +77,7 @@ test('someone who never linked still gets the paid SMS', async () => {
 
   assert.equal(sms.sent.length, 1);
   assert.equal(sms.sent[0].phoneNumber, '3000000001');
-  assert.match(sms.sent[0].text, /enviaste 4 monedas a Beto/);
+  assert.match(sms.sent[0].text, /enviaste 4 Luna a Beto/);
 });
 
 test('with no channel configured the transfer still happens', async () => {
@@ -85,8 +85,8 @@ test('with no channel configured the transfer still happens', async () => {
 
   const reply = await commands.transfer('3000000001', ['@3000000002', '4']);
 
-  assert.match(reply, /Transferencia completada/);
-  assert.equal(store._debug.users.get('3000000002').balance, 4);
+  assert.match(reply, /Enviaste \d+ Luna/);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 4);
 });
 
 test('the link code works once and only once', async () => {

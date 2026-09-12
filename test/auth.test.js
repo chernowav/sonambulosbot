@@ -53,7 +53,7 @@ test('signup creates the account and returns a usable session', async () => {
 
     assert.equal(status, 200);
     assert.equal(body.user.name, 'Cherno');
-    assert.equal(body.user.balance, 0);
+    assert.equal(body.user.balanceLuna, 0);
     assert.equal(store._debug.users.get('3001234567').email, 'cherno@correo.com');
 
     const me = await call(`/api/me?token=${encodeURIComponent(body.token)}`);
@@ -103,7 +103,7 @@ test('someone who received coins before registering can still create their accou
   await withServer(async ({ post, store }) => {
     // El tesorero le emite monedas a un número que todavía no se registró.
     const cherno = await post('/api/signup', VALID);
-    store._debug.users.get('3001234567').balance = 10;
+    store._debug.users.get('3001234567').balanceLuna = 10;
     await post('/webhook/sms', { Body: '/transfer @3007654321 6', token: cherno.body.token });
 
     // Esa persona llega al evento y crea su cuenta: debe poder, y con su saldo.
@@ -116,7 +116,7 @@ test('someone who received coins before registering can still create their accou
 
     assert.equal(ana.status, 200);
     assert.equal(ana.body.user.name, 'Ana');
-    assert.equal(ana.body.user.balance, 6);
+    assert.equal(ana.body.user.balanceLuna, 6);
 
     const login = await post('/api/login', { phone: '3007654321', pin: '1111' });
     assert.equal(login.status, 200);
@@ -234,27 +234,27 @@ test('end to end: signup, then transfer using the session token', async () => {
   await withServer(async ({ post, store }) => {
     const cherno = await post('/api/signup', VALID);
     await post('/api/signup', { ...VALID, name: 'Ana', phone: '3007654321', email: 'ana@correo.com' });
-    store._debug.users.get('3001234567').balance = 10;
+    store._debug.users.get('3001234567').balanceLuna = 10;
 
     const { body } = await post('/webhook/sms', {
       Body: '/transfer @3007654321 4',
       token: cherno.body.token,
     });
 
-    assert.match(body.response, /Transferencia completada/);
-    assert.equal(store._debug.users.get('3007654321').balance, 4);
+    assert.match(body.response, /Enviaste \d+ Luna/);
+    assert.equal(store._debug.users.get('3007654321').balanceLuna, 4);
   });
 });
 
 test('the console is locked until the PIN is verified', async () => {
   await withServer(async ({ post, store }) => {
     await post('/api/signup', VALID);
-    store._debug.users.get('3001234567').balance = 10;
+    store._debug.users.get('3001234567').balanceLuna = 10;
 
     const { body } = await post('/webhook/sms', { Body: '/transfer @3007654321 4' });
 
     assert.equal(body.reason, 'auth');
-    assert.equal(store._debug.users.get('3001234567').balance, 10);
+    assert.equal(store._debug.users.get('3001234567').balanceLuna, 10);
   });
 });
 
@@ -262,7 +262,7 @@ test('claiming a phone-only record clears a lockout caused by trying to log into
   await withServer(async ({ post, store }) => {
     // Registro fantasma: alguien le mandó monedas a este número antes de que
     // existiera la cuenta, así que no tiene PIN.
-    const fantasma = { phoneNumber: '3153811758', name: 'Usuario 1758', balance: 35, isAdmin: true };
+    const fantasma = { phoneNumber: '3153811758', name: 'Usuario 1758', balanceLuna: 35, isAdmin: true };
     store._debug.users.set('3153811758', fantasma);
 
     // Intenta entrar cinco veces; no hay PIN contra qué comparar, así que
@@ -278,7 +278,7 @@ test('claiming a phone-only record clears a lockout caused by trying to log into
     });
 
     assert.equal(alta.status, 200);
-    assert.equal(alta.body.user.balance, 35, 'debe conservar sus monedas');
+    assert.equal(alta.body.user.balanceLuna, 35, 'debe conservar sus monedas');
     assert.equal(alta.body.user.isAdmin, true, 'y sus permisos de tesorero');
 
     // Y puede entrar de una, sin arrastrar el bloqueo anterior.

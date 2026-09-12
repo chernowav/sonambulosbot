@@ -52,7 +52,7 @@ test('real transfers build a chain that verifies', async () => {
   await account('3000000001', 'Ana');
   await account('3000000002', 'Beto');
   await account('3000000009', 'Tesorero');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
 
   await commands.transfer('3000000001', ['@3000000002', '4']);
   await commands.transfer('3000000001', ['@3000000002', '3']);
@@ -68,7 +68,7 @@ test('editing an old amount breaks the chain', async () => {
   const { store, commands, account } = setup();
   await account('3000000001', 'Ana');
   await account('3000000002', 'Beto');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
 
   await commands.transfer('3000000001', ['@3000000002', '4']);
   await commands.transfer('3000000001', ['@3000000002', '3']);
@@ -85,7 +85,7 @@ test('rewriting a movement and its own hash still breaks the next one', async ()
   const { store, commands, account } = setup();
   await account('3000000001', 'Ana');
   await account('3000000002', 'Beto');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
 
   await commands.transfer('3000000001', ['@3000000002', '4']);
   await commands.transfer('3000000001', ['@3000000002', '3']);
@@ -105,7 +105,7 @@ test('deleting a movement breaks the chain', async () => {
   const { store, commands, account } = setup();
   await account('3000000001', 'Ana');
   await account('3000000002', 'Beto');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
 
   await commands.transfer('3000000001', ['@3000000002', '4']);
   await commands.transfer('3000000001', ['@3000000002', '3']);
@@ -121,7 +121,7 @@ test('swapping who received the coins breaks the chain', async () => {
   const { store, commands, account } = setup();
   await account('3000000001', 'Ana');
   await account('3000000002', 'Beto');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
 
   await commands.transfer('3000000001', ['@3000000002', '4']);
 
@@ -169,7 +169,7 @@ test('the ledger is readable without an account', async () => {
   await withServer(async ({ get, store, sessions }) => {
     await store.createAccount({ phoneNumber: '3000000001', pin: '1234', email: 'a@b.co', name: 'Ana' });
     await store.createAccount({ phoneNumber: '3000000002', pin: '1234', email: 'b@b.co', name: 'Beto' });
-    store._debug.users.get('3000000001').balance = 10;
+    store._debug.users.get('3000000001').balanceLuna = 10;
 
     const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26' });
     await commands.transfer('3000000001', ['@3000000002', '4']);
@@ -188,7 +188,7 @@ test('the public ledger never exposes a full phone number', async () => {
   await withServer(async ({ get, store }) => {
     await store.createAccount({ phoneNumber: '3153811758', pin: '1234', email: 'a@b.co', name: 'Ana' });
     await store.createAccount({ phoneNumber: '3009876543', pin: '1234', email: 'b@b.co', name: 'Beto' });
-    store._debug.users.get('3153811758').balance = 10;
+    store._debug.users.get('3153811758').balanceLuna = 10;
 
     const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26' });
     await commands.transfer('3153811758', ['@3009876543', '4']);
@@ -208,7 +208,7 @@ test('what the API publishes is enough to verify the chain from outside', async 
   await withServer(async ({ get, store }) => {
     await store.createAccount({ phoneNumber: '3000000001', pin: '1234', email: 'a@b.co', name: 'Ana' });
     await store.createAccount({ phoneNumber: '3000000002', pin: '1234', email: 'b@b.co', name: 'Beto' });
-    store._debug.users.get('3000000001').balance = 30;
+    store._debug.users.get('3000000001').balanceLuna = 30;
 
     const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26' });
     await commands.transfer('3000000001', ['@3000000002', '4']);
@@ -234,7 +234,7 @@ test('the summary counts emissions and transfers apart', async () => {
 
     const { body } = await get('/api/libro/resumen');
 
-    assert.equal(body.emitido, 20);
+    assert.equal(body.lunaVendida, 20);
     assert.equal(body.transferido, 8);
     assert.equal(body.movimientos, 3);
   });
@@ -243,7 +243,7 @@ test('the summary counts emissions and transfers apart', async () => {
 test('the summary is readable without an account and leaks no balances', async () => {
   await withServer(async ({ get, store }) => {
     await store.createAccount({ phoneNumber: '3153811758', pin: '1234', email: 'a@b.co', name: 'Ana' });
-    store._debug.users.get('3153811758').balance = 999;
+    store._debug.users.get('3153811758').balanceLuna = 999;
 
     const { status, body } = await get('/api/libro/resumen');
 
@@ -255,7 +255,7 @@ test('the summary is readable without an account and leaks no balances', async (
 test('the server verification endpoint agrees', async () => {
   await withServer(async ({ get, store }) => {
     await store.createAccount({ phoneNumber: '3000000001', pin: '1234', email: 'a@b.co', name: 'Ana' });
-    store._debug.users.get('3000000001').balance = 10;
+    store._debug.users.get('3000000001').balanceLuna = 10;
 
     const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26' });
     await commands.transfer('3000000001', ['@3000000002', '4']);

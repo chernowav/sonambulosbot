@@ -15,11 +15,13 @@ function createAdminRouter({ store, config }) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
+    // Solo habilita el rol. Antes también le regalaba 100 monedas, que ahora
+    // serían Luna salidas de la nada y sin movimiento en el libro: el
+    // tesorero se recarga con /recarga, que sí queda registrado.
     user.isAdmin = true;
-    user.balance = 100; // Mínimo recomendado
     await user.save();
 
-    res.json({ message: `✅ Admin habilitado para ${treasurerPhone}`, balance: user.balance });
+    res.json({ message: `✅ Admin habilitado para ${treasurerPhone}` });
   });
 
   return router;

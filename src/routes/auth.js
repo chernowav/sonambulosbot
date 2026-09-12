@@ -15,7 +15,9 @@ function createAuthRouter({ store, sessions, config = {} }) {
     return {
       phoneNumber: user.phoneNumber,
       name: user.name,
-      balance: user.balance,
+      balanceSol: user.balanceSol || 0,
+      balanceLuna: user.balanceLuna || 0,
+      solExpiraEn: user.solExpiraEn || null,
       isAdmin: Boolean(user.isAdmin),
     };
   }

@@ -111,8 +111,11 @@ form{display:flex;flex-direction:column;gap:16px}
    chiquito del encabezado. Y enviar monedas deja de exigir escribir la
    sintaxis de un comando en un sitio oscuro: es un botón. */
 .saldo{padding:20px var(--pad) 16px;border-bottom:1px solid var(--sep);text-align:center}
-.saldo .cifra{font-size:2.75rem;font-weight:600;color:var(--neon);line-height:1.05;letter-spacing:-.02em}
-.saldo .unidad{display:block;margin-top:4px;font-size:var(--t-sub);color:var(--mu)}
+.saldo .monedas{display:flex;gap:12px;justify-content:center}
+.saldo .moneda{flex:1;max-width:180px;background:var(--panel);border-radius:var(--r-card);padding:14px 10px}
+.saldo .moneda b{display:block;font-size:2.25rem;font-weight:600;color:var(--neon);line-height:1.05;letter-spacing:-.02em}
+.saldo .moneda span{display:block;margin-top:2px;font-size:var(--t-sub);color:var(--mu)}
+.saldo .moneda small{display:block;margin-top:6px;font-size:var(--t-foot);color:var(--err);line-height:1.3}
 .saldo .primary{margin-top:16px}
 
 /* ---------------- Hoja de envío ---------------- */
@@ -261,10 +264,19 @@ footer{border-top:1px solid var(--sep);background:var(--panel);padding:10px var(
   </header>
 
   <section class="saldo">
-    <div class="cifra"><span id="myBalance">0</span></div>
-    <span class="unidad">monedas</span>
+    <div class="monedas">
+      <div class="moneda" id="cajaSol" hidden>
+        <b id="myBalanceSol">0</b>
+        <span>☀️ Sol</span>
+        <small id="solVence"></small>
+      </div>
+      <div class="moneda">
+        <b id="myBalanceLuna">0</b>
+        <span>🌙 Luna</span>
+      </div>
+    </div>
     <button class="primary" id="btnBar" hidden>Pagar en el bar</button>
-    <button class="ghost" id="btnEnviar" style="margin-top:9px">Enviar a alguien</button>
+    <button class="ghost" id="btnEnviar" style="margin-top:9px">Enviar Luna a alguien</button>
   </section>
 
   <div class="tg" id="tgAviso" hidden>
@@ -479,7 +491,21 @@ function enterApp(session) {
 
 function paintUser(user) {
   $('myName').textContent = user.name;
-  $('myBalance').textContent = user.balance;
+  $('myBalanceSol').textContent = user.balanceSol;
+  $('myBalanceLuna').textContent = user.balanceLuna;
+
+  // La caja de Sol solo aparece si tiene entrada; a quien no la tiene, un
+  // cero grande no le dice nada.
+  $('cajaSol').hidden = !user.balanceSol;
+
+  if (user.balanceSol && user.solExpiraEn) {
+    var vence = new Date(user.solExpiraEn);
+    $('solVence').textContent = 'vence ' + vence.toLocaleString('es-CO', {
+      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+    });
+  } else {
+    $('solVence').textContent = '';
+  }
 }
 
 /* Vuelve a la pantalla de verificación conservando el teléfono, para que solo
@@ -698,7 +724,7 @@ $('input').onkeydown = function (event) {
 /* Solo atajos que consultan. Un atajo de /send traía un número real ya
    escrito: bastaba tocarlo y darle Enviar para mandarle monedas a esa
    persona sin querer. El formato se enseña en el placeholder. */
-['/balance', '/history', '/help'].forEach(function (command) {
+['/saldo', '/bar 1', '/historial', '/ayuda'].forEach(function (command) {
   var chip = document.createElement('button');
   chip.className = 'chip';
   chip.textContent = command;
@@ -839,15 +865,23 @@ document.addEventListener('keydown', function (e) {
 $('btnRevisar').onclick = function () {
   var monto = montoActual();
   var para = paraActual();
-  var saldo = parseInt($('myBalance').textContent, 10) || 0;
+  // Enviar es solo en Luna; en el bar sirven las dos.
+  var luna = parseInt($('myBalanceLuna').textContent, 10) || 0;
+  var sol = parseInt($('myBalanceSol').textContent, 10) || 0;
+  var esBar = bar && para === bar.phoneNumber;
+  var saldo = esBar ? sol + luna : luna;
 
   // Se avisa acá y no después del envío: corregir antes es gratis.
   if (!monto) return hojaAviso('Elige cuántas monedas quieres enviar.');
   if (para.length !== 10) return hojaAviso('El teléfono debe tener los 10 dígitos.');
-  if (monto > saldo) return hojaAviso('No te alcanza: tienes ' + saldo + ' monedas.');
+  if (monto > saldo) {
+    return hojaAviso(esBar
+      ? 'No te alcanza: tienes ' + sol + ' Sol y ' + luna + ' Luna.'
+      : 'No tienes suficiente Luna: tienes ' + luna + '.');
+  }
 
   var nombre = (bar && para === bar.phoneNumber) ? bar.name : recientes.get(para);
-  $('cMonto').textContent = monto + (monto === 1 ? ' moneda' : ' monedas');
+  $('cMonto').textContent = monto + (esBar ? '' : (monto === 1 ? ' Luna' : ' Luna'));
   $('cPara').textContent = nombre ? nombre + ' (' + para + ')' : para;
 
   $('paso1').hidden = true;
@@ -857,8 +891,13 @@ $('btnRevisar').onclick = function () {
 $('btnConfirmar').onclick = function () {
   var monto = montoActual();
   var para = paraActual();
+  var esBar = bar && para === bar.phoneNumber;
   cerrarHoja();
-  send('/transfer @' + para + ' ' + monto);
+
+  // El bar va por /bar y no por /enviar: solo /bar gasta la Sol primero.
+  // Mandarlo como transferencia dejaba la bebida incluida sin usar y le
+  // cobraba todo en Luna.
+  send(esBar ? '/bar ' + monto : '/enviar ' + monto + ' @' + para);
 };
 
 /* ---------- Arranque ---------- */

@@ -30,7 +30,7 @@ async function setup(sms) {
   await account('3000000001', 'Ana');
   await account('3000000002', 'Beto');
   await account('3000000009', 'Tesorero');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
 
   return { store, commands };
 }
@@ -60,13 +60,13 @@ test('both sides of a transfer get a text, each with their own balance', async (
   assert.equal(sms.sent.length, 2);
 
   const recibe = sms.sent.find((m) => m.phoneNumber === '3000000002');
-  assert.match(recibe.text, /recibiste 4 monedas de Ana/);
-  assert.match(recibe.text, /Tu saldo: 4/);
+  assert.match(recibe.text, /recibiste 4 Luna de Ana/);
+  assert.match(recibe.text, /Tu Luna: 4/);
   assert.match(recibe.text, /Movimiento #1/);
 
   const envia = sms.sent.find((m) => m.phoneNumber === '3000000001');
-  assert.match(envia.text, /enviaste 4 monedas a Beto/);
-  assert.match(envia.text, /Tu saldo: 16/);
+  assert.match(envia.text, /enviaste 4 Luna a Beto/);
+  assert.match(envia.text, /Tu Luna: 16/);
   assert.match(envia.text, /Movimiento #1/);
 });
 
@@ -89,7 +89,7 @@ test('an emission also texts the person who got the coins', async () => {
   await commands.emit('3000000009', ['@3000000002', '7']);
 
   assert.equal(sms.sent.length, 1);
-  assert.match(sms.sent[0].text, /te emitieron 7 monedas/);
+  assert.match(sms.sent[0].text, /te recargaron 7/);
 });
 
 test('the transfer still goes through when the provider is down', async () => {
@@ -99,8 +99,8 @@ test('the transfer still goes through when the provider is down', async () => {
   const reply = await commands.transfer('3000000001', ['@3000000002', '4']);
 
   // El aviso es un extra: que falle no puede deshacer el movimiento.
-  assert.match(reply, /Transferencia completada/);
-  assert.equal(store._debug.users.get('3000000002').balance, 4);
+  assert.match(reply, /Enviaste \d+ Luna/);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 4);
   assert.equal(store._debug.transactions.length, 1);
 });
 
@@ -155,7 +155,7 @@ async function setupCanales(canales) {
 
   await alta('3000000001', 'Ana');
   await alta('3000000002', 'Beto');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
   return { store, commands };
 }
 

@@ -43,35 +43,35 @@ test('transfer moves balance between two registered users', async () => {
   const { commands, store, account } = setup();
   await account('3000000001', 'A');
   await account('3000000002', 'B');
-  store._debug.users.get('3000000001').balance = 10;
+  store._debug.users.get('3000000001').balanceLuna = 10;
 
   const reply = await commands.transfer('3000000001', ['@3000000002', '4']);
 
-  assert.match(reply, /Transferencia completada/);
-  assert.equal(store._debug.users.get('3000000001').balance, 6);
-  assert.equal(store._debug.users.get('3000000002').balance, 4);
+  assert.match(reply, /Enviaste \d+ Luna/);
+  assert.equal(store._debug.users.get('3000000001').balanceLuna, 6);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 4);
 });
 
 test('transfer blocks amounts above the sender balance', async () => {
   const { commands, store, account } = setup();
   await account('3000000001', 'A');
-  store._debug.users.get('3000000001').balance = 2;
+  store._debug.users.get('3000000001').balanceLuna = 2;
 
   const reply = await commands.transfer('3000000001', ['@3000000002', '4']);
 
-  assert.match(reply, /Saldo insuficiente/);
-  assert.equal(store._debug.users.get('3000000001').balance, 2);
+  assert.match(reply, /No tienes suficiente Luna/);
+  assert.equal(store._debug.users.get('3000000001').balanceLuna, 2);
 });
 
 test('transfer rejects sending to yourself', async () => {
   const { commands, store, account } = setup();
   await account('3000000001', 'A');
-  store._debug.users.get('3000000001').balance = 10;
+  store._debug.users.get('3000000001').balanceLuna = 10;
 
   const reply = await commands.transfer('3000000001', ['@3000000001', '4']);
 
   assert.match(reply, /a ti mismo/);
-  assert.equal(store._debug.users.get('3000000001').balance, 10);
+  assert.equal(store._debug.users.get('3000000001').balanceLuna, 10);
 });
 
 test('transfer requires the sender to be registered', async () => {
@@ -83,12 +83,12 @@ test('transfer requires the sender to be registered', async () => {
 test('send defaults the amount to 1 and accepts a plain digit target', async () => {
   const { commands, store, account } = setup();
   await account('3000000001', 'A');
-  store._debug.users.get('3000000001').balance = 5;
+  store._debug.users.get('3000000001').balanceLuna = 5;
 
   const reply = await commands.send('3000000001', ['tokens', 'to', '3000000002']);
 
-  assert.match(reply, /Enviaste: 1 monedas/);
-  assert.equal(store._debug.users.get('3000000002').balance, 1);
+  assert.match(reply, /Enviaste 1 Luna/);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 1);
 });
 
 test('send rejects a message with no identifiable target', async () => {
@@ -109,7 +109,7 @@ test('the treasurer becomes admin even if they registered before being named', a
   const commands = createCommands(named, { defaultEventId: 'event_test' });
   const reply = await commands.emit('3000000009', ['@3000000002', '3']);
 
-  assert.match(reply, /Emitidas 3 monedas/);
+  assert.match(reply, /Recargadas 3 Luna/);
 });
 
 test('emit is rejected for non-admin users', async () => {
@@ -125,8 +125,8 @@ test('emit succeeds for the treasurer and credits the recipient', async () => {
 
   const reply = await commands.emit('3000000009', ['@3000000002', '3']);
 
-  assert.match(reply, /Emitidas 3 monedas/);
-  assert.equal(store._debug.users.get('3000000002').balance, 3);
+  assert.match(reply, /Recargadas 3 Luna/);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 3);
 });
 
 test('emit reaches several people in one command', async () => {
@@ -142,7 +142,7 @@ test('emit reaches several people in one command', async () => {
 
   assert.match(reply, /a 3 personas \(30 en total\)/);
   ['3000000002', '3000000003', '3000000004'].forEach((phone) => {
-    assert.equal(store._debug.users.get(phone).balance, 10);
+    assert.equal(store._debug.users.get(phone).balanceLuna, 10);
   });
 
   // Un movimiento por persona: el libro no agrupa lo que ocurrió por separado.
@@ -155,7 +155,7 @@ test('a number repeated in the list is only paid once', async () => {
 
   await commands.emit('3000000009', ['@3000000002', '@3000000002', '7']);
 
-  assert.equal(store._debug.users.get('3000000002').balance, 7);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 7);
   assert.equal(store._debug.transactions.length, 1);
 });
 
@@ -165,8 +165,8 @@ test('emit still accepts the old single positional form', async () => {
 
   const reply = await commands.emit('3000000009', ['3000000002', '4']);
 
-  assert.match(reply, /Emitidas 4 monedas/);
-  assert.equal(store._debug.users.get('3000000002').balance, 4);
+  assert.match(reply, /Recargadas 4 Luna/);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 4);
 });
 
 test('emit without an amount explains the format instead of guessing', async () => {
@@ -184,7 +184,7 @@ test('a mistyped number is refused and nothing is emitted to anyone', async () =
   const reply = await commands.emit('3000000009', ['@3000000002', '@30011', '10']);
 
   assert.match(reply, /no tienen 10 dígitos/);
-  assert.match(reply, /No se emitió nada/);
+  assert.match(reply, /No se recargó nada/);
   // Ni al bueno, para que el tesorero no quede sin saber qué alcanzó a pasar.
   assert.equal(store._debug.users.has('3000000002'), false);
   assert.equal(store._debug.users.has('30011'), false);
@@ -194,12 +194,12 @@ test('a mistyped number is refused and nothing is emitted to anyone', async () =
 test('a transfer to a mistyped number is refused instead of creating a ghost account', async () => {
   const { commands, store, account } = setup();
   await account('3000000001', 'Ana');
-  store._debug.users.get('3000000001').balance = 10;
+  store._debug.users.get('3000000001').balanceLuna = 10;
 
   const reply = await commands.transfer('3000000001', ['@123', '5']);
 
   assert.match(reply, /10 dígitos/);
-  assert.equal(store._debug.users.get('3000000001').balance, 10);
+  assert.equal(store._debug.users.get('3000000001').balanceLuna, 10);
   assert.equal(store._debug.users.has('123'), false);
 });
 
@@ -307,14 +307,14 @@ test('a transfer that cannot be written to the ledger gives the coins back', asy
   const { store, commands, account } = setupConLibroRoto();
   await account('3000000001', 'Ana');
   await account('3000000002', 'Beto');
-  store._debug.users.get('3000000001').balance = 10;
+  store._debug.users.get('3000000001').balanceLuna = 10;
 
   const reply = await commands.transfer('3000000001', ['@3000000002', '4']);
 
   assert.match(reply, /No se pudo registrar/);
   // Lo que importa: nadie perdió ni ganó monedas sin que quedara escrito.
-  assert.equal(store._debug.users.get('3000000001').balance, 10);
-  assert.equal(store._debug.users.get('3000000002').balance, 0);
+  assert.equal(store._debug.users.get('3000000001').balanceLuna, 10);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 0);
 });
 
 test('an emission that cannot be written to the ledger gives the coins back', async () => {
@@ -323,8 +323,8 @@ test('an emission that cannot be written to the ledger gives the coins back', as
 
   const reply = await commands.emit('3000000009', ['@3000000002', '15']);
 
-  assert.match(reply, /no aceptó la emisión/);
-  assert.equal(store._debug.users.get('3000000002').balance, 0);
+  assert.match(reply, /no aceptó la recarga/);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 0);
 });
 
 test('a failed bulk emission says who already received', async () => {
@@ -345,8 +345,8 @@ test('a failed bulk emission says who already received', async () => {
   const reply = await commands.emit('3000000009', ['@3000000002', '@3000000003', '10']);
 
   assert.match(reply, /Alcanzaron a recibir/);
-  assert.equal(store._debug.users.get('3000000002').balance, 10);
-  assert.equal(store._debug.users.get('3000000003').balance, 0);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 10);
+  assert.equal(store._debug.users.get('3000000003').balanceLuna, 0);
 });
 
 /* ---------- Pagar en el bar ---------- */
@@ -362,13 +362,13 @@ test('/bar pays the bar without anyone having to know its number', async () => {
   const { store, commands, alta } = setupBar('3007778899');
   await alta('3000000001', 'Ana');
   await alta('3007778899', 'Bar Piso 26');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
 
   const reply = await commands.bar('3000000001', ['6']);
 
-  assert.match(reply, /Transferencia completada/);
-  assert.equal(store._debug.users.get('3000000001').balance, 14);
-  assert.equal(store._debug.users.get('3007778899').balance, 6);
+  assert.match(reply, /Pagado en el bar/);
+  assert.equal(store._debug.users.get('3000000001').balanceLuna, 14);
+  assert.equal(store._debug.users.get('3007778899').balanceLuna, 6);
 });
 
 test('/bar says so when the bar has no account configured', async () => {
@@ -391,7 +391,7 @@ test('a bar payment lands in the public ledger like any other movement', async (
   const { store, commands, alta } = setupBar('3007778899');
   await alta('3000000001', 'Ana');
   await alta('3007778899', 'Bar Piso 26');
-  store._debug.users.get('3000000001').balance = 20;
+  store._debug.users.get('3000000001').balanceLuna = 20;
 
   await commands.bar('3000000001', ['6']);
 
@@ -408,33 +408,184 @@ test('the amount can come before or after the number', async () => {
     const { commands, store, account } = setup();
     await account('3000000001', 'Ana');
     await account('3000000002', 'Beto');
-    store._debug.users.get('3000000001').balance = 10;
+    store._debug.users.get('3000000001').balanceLuna = 10;
 
     const reply = await commands.transfer('3000000001', args);
 
-    assert.match(reply, /Transferencia completada/, `falló con ${JSON.stringify(args)}`);
-    assert.equal(store._debug.users.get('3000000002').balance, 4);
+    assert.match(reply, /Enviaste \d+ Luna/, `falló con ${JSON.stringify(args)}`);
+    assert.equal(store._debug.users.get('3000000002').balanceLuna, 4);
   }
 });
 
 test('the order does not matter without the @ either', async () => {
   const { commands, store, account } = setup();
   await account('3000000001', 'Ana');
-  store._debug.users.get('3000000001').balance = 10;
+  store._debug.users.get('3000000001').balanceLuna = 10;
 
   const reply = await commands.transfer('3000000001', ['7', '3000000002']);
 
-  assert.match(reply, /Transferencia completada/);
-  assert.equal(store._debug.users.get('3000000002').balance, 7);
+  assert.match(reply, /Enviaste \d+ Luna/);
+  assert.equal(store._debug.users.get('3000000002').balanceLuna, 7);
 });
 
 test('two numbers that are neither a phone are still refused', async () => {
   const { commands, store, account } = setup();
   await account('3000000001', 'Ana');
-  store._debug.users.get('3000000001').balance = 10;
+  store._debug.users.get('3000000001').balanceLuna = 10;
 
   const reply = await commands.transfer('3000000001', ['5', '10']);
 
   assert.match(reply, /destino inválido/);
-  assert.equal(store._debug.users.get('3000000001').balance, 10);
+  assert.equal(store._debug.users.get('3000000001').balanceLuna, 10);
+});
+
+/* ---------- Sol y Luna ---------- */
+
+function setupMonedas(barPhone = '3007778899') {
+  const store = createFakeStore({ treasurerPhone: '3000000009' });
+  const commands = createCommands(store, {
+    defaultEventId: 'e', botName: 'Piso 26', barPhone,
+  });
+  const alta = (p, n) => store.createAccount({ phoneNumber: p, pin: '1234', email: 'a@b.co', name: n });
+  return { store, commands, alta };
+}
+
+test('selling an entry gives exactly one Sol', async () => {
+  const { store, commands, alta } = setupMonedas();
+  await alta('3000000009', 'Tesorero');
+  await alta('3000000001', 'Ana');
+
+  const reply = await commands.entrada('3000000009', ['@3000000001']);
+
+  assert.match(reply, /1 entrada\(s\) vendida\(s\)/);
+  assert.equal(store._debug.users.get('3000000001').balanceSol, 1);
+  assert.equal(store._debug.users.get('3000000001').balanceLuna, 0);
+});
+
+test('nobody can buy a second entry the same night', async () => {
+  const { store, commands, alta } = setupMonedas();
+  await alta('3000000009', 'Tesorero');
+  await alta('3000000001', 'Ana');
+
+  await commands.entrada('3000000009', ['@3000000001']);
+  const otra = await commands.entrada('3000000009', ['@3000000001']);
+
+  assert.match(otra, /Ya tenían entrada/);
+  // Sigue con una sola: contar Soles tiene que seguir siendo contar entradas.
+  assert.equal(store._debug.users.get('3000000001').balanceSol, 1);
+  assert.equal(store._debug.transactions.filter((t) => t.action === 'entrada').length, 1);
+});
+
+test('Sol cannot be passed to another person', async () => {
+  const { store, commands, alta } = setupMonedas();
+  await alta('3000000009', 'Tesorero');
+  await alta('3000000001', 'Ana');
+  await alta('3000000002', 'Beto');
+  await commands.entrada('3000000009', ['@3000000001']);
+
+  // Ana tiene 1 Sol y 0 Luna: transferir debe negarse, no gastarle la entrada.
+  const reply = await commands.transfer('3000000001', ['@3000000002', '1']);
+
+  assert.match(reply, /No tienes suficiente Luna/);
+  assert.equal(store._debug.users.get('3000000001').balanceSol, 1);
+  assert.equal(store._debug.users.get('3000000002').balanceSol, 0);
+});
+
+test('the bar spends Sol before Luna', async () => {
+  const { store, commands, alta } = setupMonedas();
+  await alta('3000000009', 'Tesorero');
+  await alta('3000000001', 'Ana');
+  await alta('3007778899', 'Bar');
+  await commands.entrada('3000000009', ['@3000000001']);
+  await commands.recarga('3000000009', ['@3000000001', '10']);
+
+  const reply = await commands.bar('3000000001', ['1']);
+
+  assert.match(reply, /1 Sol/);
+  const ana = store._debug.users.get('3000000001');
+  assert.equal(ana.balanceSol, 0, 'la Sol se gasta primero porque vence');
+  assert.equal(ana.balanceLuna, 10, 'la Luna no se toca si la Sol alcanzaba');
+});
+
+test('a bill bigger than the Sol is completed with Luna', async () => {
+  const { store, commands, alta } = setupMonedas();
+  await alta('3000000009', 'Tesorero');
+  await alta('3000000001', 'Ana');
+  await alta('3007778899', 'Bar');
+  await commands.entrada('3000000009', ['@3000000001']);
+  await commands.recarga('3000000009', ['@3000000001', '10']);
+
+  await commands.bar('3000000001', ['4']);
+
+  const ana = store._debug.users.get('3000000001');
+  assert.equal(ana.balanceSol, 0);
+  assert.equal(ana.balanceLuna, 7, '1 de Sol + 3 de Luna');
+  // Solo la Luna entra a la caja del bar: la Sol se canjea y se consume.
+  assert.equal(store._debug.users.get('3007778899').balanceLuna, 3);
+});
+
+test('the bar refuses a bill neither currency can cover', async () => {
+  const { store, commands, alta } = setupMonedas();
+  await alta('3000000009', 'Tesorero');
+  await alta('3000000001', 'Ana');
+  await commands.entrada('3000000009', ['@3000000001']);
+
+  const reply = await commands.bar('3000000001', ['50']);
+
+  assert.match(reply, /No te alcanza/);
+  assert.equal(store._debug.users.get('3000000001').balanceSol, 1, 'no se le toca nada');
+});
+
+test('expired Sol disappears and the ledger says so', async () => {
+  const { store, commands, alta } = setupMonedas();
+  await alta('3000000009', 'Tesorero');
+  await alta('3000000001', 'Ana');
+  await commands.entrada('3000000009', ['@3000000001']);
+
+  // Se adelanta el reloj de su entrada.
+  store._debug.users.get('3000000001').solExpiraEn = Date.now() - 1000;
+
+  const saldo = await commands.balance('3000000001');
+
+  assert.doesNotMatch(saldo, /Sol: 1/);
+  assert.equal(store._debug.users.get('3000000001').balanceSol, 0);
+
+  // Lo importante: no se evapora en silencio. Si lo hiciera, las cuentas del
+  // libro dejarían de cuadrar y perdería su razón de ser.
+  const vencimiento = store._debug.transactions.find((t) => t.action === 'expiry');
+  assert.ok(vencimiento, 'el vencimiento debe quedar registrado');
+  assert.equal(vencimiento.moneda, 'sol');
+  assert.equal(vencimiento.amount, 1);
+});
+
+test('Sol that has not expired is still there', async () => {
+  const { store, commands, alta } = setupMonedas();
+  await alta('3000000009', 'Tesorero');
+  await alta('3000000001', 'Ana');
+  await commands.entrada('3000000009', ['@3000000001']);
+
+  const saldo = await commands.balance('3000000001');
+
+  assert.match(saldo, /Sol: 1/);
+  assert.match(saldo, /vence el/);
+  assert.equal(store._debug.users.get('3000000001').balanceSol, 1);
+});
+
+test('the treasury figures separate tickets from top-ups', async () => {
+  const { store, commands, alta } = setupMonedas();
+  await alta('3000000009', 'Tesorero');
+  await alta('3000000001', 'Ana');
+  await alta('3000000002', 'Beto');
+  await alta('3007778899', 'Bar');
+
+  await commands.entrada('3000000009', ['@3000000001', '@3000000002']);
+  await commands.recarga('3000000009', ['@3000000001', '30']);
+  await commands.bar('3000000001', ['5']);
+
+  const r = await store.ledgerSummary();
+
+  assert.equal(r.entradas, 2, 'dos entradas vendidas');
+  assert.equal(r.lunaVendida, 30);
+  assert.equal(r.solCanjeada, 1, 'una bebida incluida canjeada');
+  assert.equal(r.lunaEnBar, 4, 'el resto de la cuenta lo pagó la Luna');
 });

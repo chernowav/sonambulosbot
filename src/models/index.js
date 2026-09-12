@@ -6,7 +6,22 @@ const userSchema = new mongoose.Schema({
   // la cuenta (eso lo hace phoneNumber) y por eso no es único.
   name: String,
   email: String,
-  balance: { type: Number, default: 0 },
+  // Dos monedas con reglas distintas:
+  //
+  // Sol es la entrada al evento e incluye una bebida. Se emite una sola vez
+  // por persona y por noche, no se puede recomprar ni pasar a nadie, y vence
+  // a las 24 horas. Contar Soles emitidas es contar entradas vendidas.
+  //
+  // Luna se compra aparte, no vence y es la que circula en el bar.
+  balanceSol: { type: Number, default: 0 },
+  balanceLuna: { type: Number, default: 0 },
+
+  // Un solo vencimiento por persona en vez de uno por cada emisión: llevar
+  // lotes separados obligaría a abandonar el decremento atómico que impide
+  // que dos pagos simultáneos en la barra dejen el saldo en negativo. Recibir
+  // Sol extra estira el reloj de toda la Sol, que en una sola noche es un mal
+  // mucho menor.
+  solExpiraEn: Date,
   isArtist: { type: Boolean, default: false },
   isAdmin: { type: Boolean, default: false },
   // Hash del PIN que la persona eligió al crear la cuenta. Es la credencial
@@ -76,6 +91,7 @@ const transactionSchema = new mongoose.Schema({
   action: String,
   description: String,
   amount: Number,
+  moneda: { type: String, enum: ['sol', 'luna'], default: 'luna' },
   timestamp: { type: Date, default: Date.now },
   eventId: String,
   visible: { type: Boolean, default: true },
