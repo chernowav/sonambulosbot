@@ -26,6 +26,9 @@ const config = {
   sessionSecret: process.env.SESSION_SECRET || null,
 
   treasurerPhone: process.env.TREASURER_PHONE || '',
+  // Cuenta a la que /bar manda las monedas. Sin esto el comando avisa que
+  // falta configurarlo, en vez de mandarle monedas a la nada.
+  barPhone: (process.env.BAR_PHONE || '').replace(/\D/g, '').slice(-10),
   botName: process.env.BOT_NAME || 'Piso 26',
   defaultEventId: process.env.EVENT_ID || 'event_oct3_2026',
 

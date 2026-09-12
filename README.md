@@ -90,14 +90,14 @@ La consola abre en una pantalla de **crear cuenta / iniciar sesión**:
 - Ese token es el que autoriza los comandos: el servidor saca de él el teléfono
   de quien opera y **ignora el que venga en el cuerpo del request**, así nadie
   puede escribir el número de otra persona y gastarle el saldo.
-- Sin sesión válida, todo comando salvo `/help` responde
+- Sin sesión válida, todo comando salvo `/ayuda` responde
   `{ locked: true, reason: "auth" }` y la consola vuelve a pedir el PIN.
 
 Si alguien recibe monedas antes de registrarse, se le crea un registro sin PIN;
 cuando después crea su cuenta la reclama y conserva el saldo.
 
 Quien olvide su PIN necesita que el tesorero le genere uno nuevo con
-`/resetpin @usuario` y se lo diga en persona.
+`/nuevopin @numero` y se lo diga en persona.
 
 ## Variables de entorno
 
@@ -117,6 +117,8 @@ TWILIO_ACCOUNT_SID         Opcional. Sin las tres de Twilio no se mandan avisos,
 TWILIO_AUTH_TOKEN          pero todo lo demás funciona igual.
 TWILIO_FROM
 SMS_COUNTRY_CODE=+57
+BAR_PHONE                  Cuenta a la que /bar manda las monedas. Sin esto no
+                           aparece el botón de pagar en el bar.
 TREASURER_PHONE            Número (solo dígitos) promovido a admin automáticamente.
 BOT_NAME=Piso 26
 EVENT_ID=event_oct3_2026
@@ -138,14 +140,19 @@ EVENT_ID=event_oct3_2026
 
 ## Comandos
 
-Todos requieren sesión iniciada, salvo `/help`.
+Todos requieren sesión iniciada, salvo `/ayuda`.
 
-`/balance` · `/history` · `/transfer @usuario X` · `/send X tokens to @usuario` ·
-`/register [nombre]` (cambia tu nombre) · `/help`
+Los comandos se escriben en español; los nombres en inglés siguen sirviendo
+como alias (`src/utils/comandos.js`). El alias se traduce **antes** de mirar
+qué comandos exigen clave de tesorero: si el candado comparara el nombre
+escrito, `/emitir` se lo saltaría por no llamarse `emit`.
 
-Admin (además de la sesión, piden la clave de tesorero):
-`/emit @usuario X` · `/users` · `/content [link] @talento1 @talento2` ·
-`/resetpin @usuario`
+`/saldo` · `/bar X` (pagar en el bar) · `/enviar @numero X` · `/historial` ·
+`/nombre [como te llamas]` · `/ayuda`
+
+Tesorero (además de la sesión, piden la clave):
+`/emitir @numero X` · `/emitir @uno @dos @tres X` · `/usuarios` ·
+`/contenido [link] @talento1 @talento2` · `/nuevopin @numero`
 
 ## Desarrollo
 

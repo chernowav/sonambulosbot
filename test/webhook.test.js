@@ -48,7 +48,7 @@ test('/help works without a session', async () => {
   const res = await run(handleIncoming, { Body: '/help' });
 
   assert.equal(res.body.locked, undefined);
-  assert.match(res.body.response, /Comandos Sonámbulos/);
+  assert.match(res.body.response, /Comandos de/);
 });
 
 test('every other command is locked without a session', async () => {
@@ -141,4 +141,58 @@ test('preserves the case of command arguments (names, content links)', async () 
   });
 
   assert.equal(store._debug.users.get('3000000001').name, 'Cherno');
+});
+
+/* ---------- Comandos en español ---------- */
+
+test('the Spanish name of an admin command is still gated by the key', async () => {
+  const { handleIncoming, sessions, account } = setup();
+  await account('3000000009', 'Tesorero');
+
+  // Lo importante: el candado compara nombres internos. Si no se tradujera el
+  // alias antes de mirarlo, /emitir pasaría de largo por no llamarse "emit" y
+  // cualquiera con sesión podría emitir monedas.
+  const res = await run(handleIncoming, {
+    Body: '/emitir @3000000002 5',
+    token: sessions.issue('3000000009'),
+  });
+
+  assert.equal(res.body.locked, true);
+  assert.equal(res.body.reason, 'admin');
+});
+
+test('the Spanish name works once the key is given', async () => {
+  const { handleIncoming, sessions, account } = setup();
+  await account('3000000009', 'Tesorero');
+
+  const res = await run(handleIncoming, {
+    Body: '/emitir @3000000002 5',
+    token: sessions.issue('3000000009'),
+    adminKey: 'secret123',
+  });
+
+  assert.match(res.body.response, /Emitidas 5 monedas/);
+});
+
+test('/ayuda answers without a session, same as /help', async () => {
+  const { handleIncoming } = setup();
+  const res = await run(handleIncoming, { Body: '/ayuda' });
+
+  assert.equal(res.body.locked, undefined);
+  assert.match(res.body.response, /Comandos de/);
+});
+
+test('/saldo and /enviar reach the same commands as their English names', async () => {
+  const { handleIncoming, store, sessions, account } = setup();
+  await account('3000000001', 'Ana');
+  await account('3000000002', 'Beto');
+  store._debug.users.get('3000000001').balance = 10;
+  const token = sessions.issue('3000000001');
+
+  const saldo = await run(handleIncoming, { Body: '/saldo', token });
+  assert.match(saldo.body.response, /Tu saldo: 10 monedas/);
+
+  const enviar = await run(handleIncoming, { Body: '/enviar @3000000002 4', token });
+  assert.match(enviar.body.response, /Transferencia completada/);
+  assert.equal(store._debug.users.get('3000000002').balance, 4);
 });

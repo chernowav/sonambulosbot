@@ -38,7 +38,7 @@ function createApp({ config, store, sessions, commands, sendMessage, sms, whatsa
     res.sendFile(path.join(__dirname, '..', 'public', 'libro.html'))
   );
 
-  app.use('/api', createAuthRouter({ store, sessions }));
+  app.use('/api', createAuthRouter({ store, sessions, config }));
   app.use('/api', createLedgerRouter({ store }));
 
   if (telegram) {

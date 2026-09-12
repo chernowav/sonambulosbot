@@ -6,7 +6,7 @@ const { isValidPin } = require('../utils/pin');
 // problema perdido y acá el correo no es la credencial.
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
-function createAuthRouter({ store, sessions }) {
+function createAuthRouter({ store, sessions, config = {} }) {
   const router = express.Router();
 
   // Lo que se le devuelve al navegador. Nunca incluye pinHash ni el correo:
@@ -69,6 +69,14 @@ function createAuthRouter({ store, sessions }) {
 
   // Restaura la sesión cuando la persona recarga la página, y de paso trae el
   // saldo al día sin gastar un comando.
+  // Cual es la cuenta del bar, para que la consola pueda ofrecer pagarle de un
+  // toque sin que nadie tenga que saberse su numero.
+  async function datosDelBar() {
+    if (!config.barPhone) return null;
+    const bar = await store.getUser(config.barPhone);
+    return { phoneNumber: config.barPhone, name: bar ? bar.name : 'Bar' };
+  }
+
   router.get('/me', async (req, res) => {
     const session = sessions.verify(req.query.token);
     if (!session) return res.status(401).json({ error: 'Sesión expirada.' });
@@ -76,7 +84,7 @@ function createAuthRouter({ store, sessions }) {
     const user = await store.getUser(session.phoneNumber);
     if (!user) return res.status(401).json({ error: 'Sesión expirada.' });
 
-    res.json({ user: publicUser(user) });
+    res.json({ user: publicUser(user), bar: await datosDelBar() });
   });
 
   // Movimientos míos que todavía no había visto, más el saldo al día. La
@@ -96,6 +104,7 @@ function createAuthRouter({ store, sessions }) {
 
     res.json({
       user: publicUser(user),
+      bar: await datosDelBar(),
       movimientos: movimientos.map((m) => {
         const recibido = m.to === session.phoneNumber;
         return {

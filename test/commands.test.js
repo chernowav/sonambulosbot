@@ -277,14 +277,14 @@ test('help only lists admin commands to admins', async () => {
   const adminHelp = await commands.help('3000000009');
   const userHelp = await commands.help('3000000001');
 
-  assert.match(adminHelp, /Admin:/);
-  assert.doesNotMatch(userHelp, /Admin:/);
+  assert.match(adminHelp, /Tesorero/);
+  assert.doesNotMatch(userHelp, /Tesorero/);
 });
 
 test('help works for someone who has not logged in yet', async () => {
   const { commands } = setup();
   const reply = await commands.help(null);
-  assert.match(reply, /Comandos Sonámbulos/);
+  assert.match(reply, /Comandos de/);
 });
 
 /* ---------- Saldos y libro no pueden separarse ---------- */
@@ -347,4 +347,56 @@ test('a failed bulk emission says who already received', async () => {
   assert.match(reply, /Alcanzaron a recibir/);
   assert.equal(store._debug.users.get('3000000002').balance, 10);
   assert.equal(store._debug.users.get('3000000003').balance, 0);
+});
+
+/* ---------- Pagar en el bar ---------- */
+
+function setupBar(barPhone) {
+  const store = createFakeStore({});
+  const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26', barPhone });
+  const alta = (p, n) => store.createAccount({ phoneNumber: p, pin: '1234', email: 'a@b.co', name: n });
+  return { store, commands, alta };
+}
+
+test('/bar pays the bar without anyone having to know its number', async () => {
+  const { store, commands, alta } = setupBar('3007778899');
+  await alta('3000000001', 'Ana');
+  await alta('3007778899', 'Bar Piso 26');
+  store._debug.users.get('3000000001').balance = 20;
+
+  const reply = await commands.bar('3000000001', ['6']);
+
+  assert.match(reply, /Transferencia completada/);
+  assert.equal(store._debug.users.get('3000000001').balance, 14);
+  assert.equal(store._debug.users.get('3007778899').balance, 6);
+});
+
+test('/bar says so when the bar has no account configured', async () => {
+  const { commands, alta } = setupBar('');
+  await alta('3000000001', 'Ana');
+
+  const reply = await commands.bar('3000000001', ['6']);
+
+  assert.match(reply, /no está configurado/);
+});
+
+test('/bar without an amount explains the format', async () => {
+  const { commands, alta } = setupBar('3007778899');
+  await alta('3000000001', 'Ana');
+
+  assert.match(await commands.bar('3000000001', []), /Formato: \/bar/);
+});
+
+test('a bar payment lands in the public ledger like any other movement', async () => {
+  const { store, commands, alta } = setupBar('3007778899');
+  await alta('3000000001', 'Ana');
+  await alta('3007778899', 'Bar Piso 26');
+  store._debug.users.get('3000000001').balance = 20;
+
+  await commands.bar('3000000001', ['6']);
+
+  const libro = await store.listLedgerInOrder();
+  assert.equal(libro.length, 1);
+  assert.match(libro[0].toLabel, /Bar Piso 26/);
+  assert.equal(libro[0].amount, 6);
 });

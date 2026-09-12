@@ -1,5 +1,6 @@
 const { normalizePhone, isValidPhone } = require('../utils/phone');
 const { parseAmount, parseSendArgs } = require('../utils/parse');
+const { ALIAS } = require('../utils/comandos');
 
 // Comandos del bot. Reciben el store como dependencia (en vez de importar
 // los modelos de Mongoose directamente) para poder probarlos con un store
@@ -289,24 +290,44 @@ Vuelve a emitir solo a los que faltan.`;
     const user = phoneNumber ? await store.getUser(phoneNumber) : null;
     const isAdmin = user?.isAdmin;
 
-    let msg = '📖 Comandos Sonámbulos:\n\n';
-    msg += '/balance — Ver tu saldo\n';
-    msg += '/transfer @usuario X — Enviar X monedas\n';
-    msg += '/send X tokens to @numero — Enviar X (o 1 si omites X)\n';
-    msg += '/history — Últimas transacciones\n';
-    msg += '/register [nombre] — Cambiar tu nombre\n';
+    let msg = `📖 Comandos de ${config.botName}:\n\n`;
+    msg += '/saldo — Ver cuántas monedas tienes\n';
+    msg += '/bar X — Pagar X monedas en el bar\n';
+    msg += '/enviar @numero X — Enviarle X monedas a alguien\n';
+    msg += '/historial — Tus últimos movimientos\n';
+    msg += '/nombre [como te llamas] — Cambiar tu nombre\n';
+    msg += '/ayuda — Esta lista\n';
 
     if (isAdmin) {
-      msg += '\n👑 Admin:\n';
-      msg += '/emit @usuario X — Emitir monedas\n';
-      msg += '/emit @uno @dos @tres X — Emitir a varios de una vez\n';
-      msg += '/users — Listar usuarios\n';
-      msg += '/content [link] @talento1 @talento2 — Publicar contenido en sus Universos\n';
-      msg += '/resetpin @usuario — Generar un PIN nuevo para alguien que lo olvidó\n';
+      msg += '\n👑 Tesorero (piden la clave):\n';
+      msg += '/emitir @numero X — Emitir monedas\n';
+      msg += '/emitir @uno @dos @tres X — Emitir a varios de una vez\n';
+      msg += '/usuarios — Ver la lista de gente\n';
+      msg += '/contenido [link] @talento1 @talento2 — Publicar en sus Universos\n';
+      msg += '/nuevopin @numero — Darle un PIN nuevo a quien lo olvidó\n';
     }
 
     return msg;
   };
+
+  // Pagar en el bar es lo que más se va a hacer en la noche, así que tiene su
+  // propio comando en vez de obligar a nadie a recordar el número del bar.
+  commands.bar = async (phoneNumber, args) => {
+    if (!config.barPhone) {
+      return '❌ El bar todavía no está configurado. Avísale al tesorero.';
+    }
+
+    const amount = parseAmount(args[0]);
+    if (Number.isNaN(amount)) return '❌ Formato: /bar X — cuántas monedas pagas.';
+
+    return commands.transfer(phoneNumber, [`@${config.barPhone}`, String(amount)]);
+  };
+
+  // Los nombres en español apuntan a las mismas funciones, no son copias: si
+  // mañana cambia /transfer, /enviar cambia con él.
+  Object.entries(ALIAS).forEach(([es, en]) => {
+    commands[es] = (...args) => commands[en](...args);
+  });
 
   return commands;
 }

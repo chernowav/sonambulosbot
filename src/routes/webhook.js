@@ -1,3 +1,5 @@
+const { canonico } = require('../utils/comandos');
+
 const ADMIN_LOCKED_COMMANDS = new Set(['emit', 'users', 'content', 'resetpin']);
 
 // Lo único que se puede pedir sin haber iniciado sesión.
@@ -18,7 +20,9 @@ function createWebhookHandler({ commands, config, sendMessage, sessions }) {
     // (nombres, y sobre todo links de /content) mantienen mayúsculas y
     // minúsculas tal como se escribieron.
     const parts = incoming.split(/\s+/);
-    const command = parts[0].replace('/', '').toLowerCase();
+    // Se traduce el alias de una: todo lo que sigue (candado de admin,
+    // despacho) razona sobre el nombre interno, nunca sobre el escrito.
+    const command = canonico(parts[0].replace('/', '').toLowerCase());
     const args = parts.slice(1);
 
     // La identidad sale del token firmado, nunca del teléfono que mande el

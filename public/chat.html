@@ -263,7 +263,8 @@ footer{border-top:1px solid var(--sep);background:var(--panel);padding:10px var(
   <section class="saldo">
     <div class="cifra"><span id="myBalance">0</span></div>
     <span class="unidad">monedas</span>
-    <button class="primary" id="btnEnviar">Enviar monedas</button>
+    <button class="primary" id="btnBar" hidden>Pagar en el bar</button>
+    <button class="ghost" id="btnEnviar" style="margin-top:9px">Enviar a alguien</button>
   </section>
 
   <div class="tg" id="tgAviso" hidden>
@@ -276,7 +277,7 @@ footer{border-top:1px solid var(--sep);background:var(--panel);padding:10px var(
   <footer>
     <div class="chips" id="chips"></div>
     <div class="bar">
-      <input id="input" placeholder="/send 5 tokens to @3001112233" aria-label="Escribe un comando">
+      <input id="input" placeholder="/saldo, /bar 5, /ayuda…" aria-label="Escribe un comando">
       <button id="sendBtn">Enviar</button>
     </div>
   </footer>
@@ -288,15 +289,17 @@ footer{border-top:1px solid var(--sep);background:var(--panel);padding:10px var(
 
     <div id="paso1">
       <h2 id="hojaTitulo">Enviar monedas</h2>
-      <p class="guia">Elige cuánto y a quién.</p>
+      <p class="guia" id="hojaGuia">Elige cuánto y a quién.</p>
 
       <label for="hMonto">Cuánto</label>
       <div class="montos" id="montos"></div>
       <input id="hMonto" inputmode="numeric" placeholder="Otra cantidad" aria-label="Otra cantidad">
 
-      <label for="hPara">A quién</label>
-      <div class="recientes" id="recientes"></div>
-      <input id="hPara" inputmode="tel" placeholder="300 123 4567">
+      <div id="bloquePara">
+        <label for="hPara">A quién</label>
+        <div class="recientes" id="recientes"></div>
+        <input id="hPara" inputmode="tel" placeholder="300 123 4567">
+      </div>
 
       <div id="hojaMsg"></div>
       <button class="primary" id="btnRevisar" style="margin-top:16px">Revisar envío</button>
@@ -464,7 +467,7 @@ function enterApp(session) {
   $('app').hidden = false;
   $('input').focus();
   if (!$('log').childElementCount) {
-    say('bot', '👋 Hola ' + session.user.name + '. Escribe /help para ver qué puedes hacer.');
+    say('bot', '👋 Hola ' + session.user.name + '. Escribe /ayuda para ver qué puedes hacer.');
   }
 
   // El primer vistazo va callado: sirve para ponerse al día con lo que ya
@@ -616,6 +619,7 @@ async function send(text, isRetry) {
 var ultimoVisto = 0;
 var vigilante = null;
 var recientes = new Map();
+var bar = null;
 
 async function mirarNovedades(callado) {
   if (!token) return;
@@ -626,6 +630,7 @@ async function mirarNovedades(callado) {
     );
 
     paintUser(r.user);
+    if (r.bar) { bar = r.bar; $('btnBar').hidden = false; }
 
     r.movimientos.forEach(function (m) {
       if (m.index > ultimoVisto) ultimoVisto = m.index;
@@ -803,7 +808,23 @@ function paraActual() {
   return paraElegido || $('hPara').value.replace(/\D/g, '');
 }
 
-$('btnEnviar').onclick = abrirHoja;
+$('btnEnviar').onclick = function () {
+  abrirHoja();
+  $('hojaTitulo').textContent = 'Enviar monedas';
+  $('hojaGuia').textContent = 'Elige cuánto y a quién.';
+  $('bloquePara').hidden = false;
+};
+
+/* Pagar la barra es lo que más se va a repetir en la noche, así que no
+   debería costar más que elegir el monto: el destinatario ya se sabe. */
+$('btnBar').onclick = function () {
+  if (!bar) return;
+  abrirHoja();
+  paraElegido = bar.phoneNumber;
+  $('hojaTitulo').textContent = 'Pagar en el bar';
+  $('hojaGuia').textContent = 'Le pagas a ' + bar.name + '. Elige cuánto.';
+  $('bloquePara').hidden = true;
+};
 $('btnCerrar').onclick = cerrarHoja;
 $('btnVolver').onclick = function () { $('paso2').hidden = true; $('paso1').hidden = false; };
 
@@ -825,7 +846,7 @@ $('btnRevisar').onclick = function () {
   if (para.length !== 10) return hojaAviso('El teléfono debe tener los 10 dígitos.');
   if (monto > saldo) return hojaAviso('No te alcanza: tienes ' + saldo + ' monedas.');
 
-  var nombre = recientes.get(para);
+  var nombre = (bar && para === bar.phoneNumber) ? bar.name : recientes.get(para);
   $('cMonto').textContent = monto + (monto === 1 ? ' moneda' : ' monedas');
   $('cPara').textContent = nombre ? nombre + ' (' + para + ')' : para;
 
