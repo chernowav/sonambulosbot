@@ -47,6 +47,13 @@ h1{margin:0;font:400 var(--t-hero)/1.1 Georgia,"Times New Roman",serif}
 h1 i{color:var(--neon);font-style:normal}
 header p{margin:8px 0 0;color:var(--mu);font-size:var(--t-sub)}
 
+/* Totales del evento. Salen de los movimientos, no de los saldos: nadie
+   necesita saber cuánto tiene cada quien para confiar en las cuentas. */
+.totales{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:18px 0 0}
+.dato{background:var(--panel);border-radius:var(--r-card);padding:13px 14px}
+.dato b{display:block;font-size:1.375rem;font-weight:600;color:var(--neon);line-height:1.15}
+.dato span{font-size:var(--t-foot);color:var(--mu)}
+
 .check{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0 22px}
 .verify{min-height:var(--tap);padding:0 18px;border:0;border-radius:var(--r-card);background:var(--neon);color:var(--on-neon);font-weight:600;font-size:var(--t-sub)}
 .verify:disabled{opacity:.45;cursor:default}
@@ -82,6 +89,12 @@ header p{margin:8px 0 0;color:var(--mu);font-size:var(--t-sub)}
   <h1>Piso <i>26</i></h1>
   <p>Libro de movimientos. Público, y verificable por cualquiera.</p>
 </header>
+
+<div class="totales" id="totales" hidden>
+  <div class="dato"><b id="tEmitido">—</b><span>monedas emitidas</span></div>
+  <div class="dato"><b id="tTransferido">—</b><span>monedas movidas</span></div>
+  <div class="dato"><b id="tMovimientos">—</b><span>movimientos</span></div>
+</div>
 
 <div class="check">
   <button class="verify" id="btnVerificar">Verificar la cadena</button>
@@ -282,7 +295,24 @@ $('btnVerificar').onclick = async function () {
 
 $('btnMas').onclick = cargarMas;
 
+async function cargarTotales() {
+  try {
+    var res = await fetch('/api/libro/resumen');
+    if (!res.ok) return;
+    var t = await res.json();
+    if (!t.movimientos) return;
+
+    $('tEmitido').textContent = t.emitido;
+    $('tTransferido').textContent = t.transferido;
+    $('tMovimientos').textContent = t.movimientos;
+    $('totales').hidden = false;
+  } catch (error) {
+    // Los totales son un extra: si fallan, el libro se ve igual.
+  }
+}
+
 (async function () {
+  cargarTotales();
   await cargarMas();
   if (!movimientos.length) {
     var vacio = document.createElement('p');

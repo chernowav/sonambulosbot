@@ -290,6 +290,23 @@ function createMongoStore({ treasurerPhone }) {
     return Transaction.find(query).sort({ index: -1 }).limit(Math.min(limit, 200));
   }
 
+  // Totales del libro. Salen solo de los movimientos, no de los saldos: así
+  // el resumen es público sin exponer cuánto tiene cada quien.
+  async function ledgerSummary() {
+    const filas = await Transaction.aggregate([
+      { $match: { index: { $exists: true } } },
+      { $group: { _id: '$action', total: { $sum: '$amount' }, cuantos: { $sum: 1 } } },
+    ]);
+
+    const por = Object.fromEntries(filas.map((f) => [f._id, f]));
+
+    return {
+      emitido: por.emission ? por.emission.total : 0,
+      transferido: por.transfer ? por.transfer.total : 0,
+      movimientos: filas.reduce((n, f) => n + f.cuantos, 0),
+    };
+  }
+
   // En orden, desde el primero: así es como se verifica la cadena.
   async function listLedgerInOrder(limit = 2000) {
     return Transaction.find({ index: { $exists: true } }).sort({ index: 1 }).limit(limit);
@@ -349,6 +366,7 @@ function createMongoStore({ treasurerPhone }) {
     listLedger,
     listLedgerInOrder,
     listMovementsSince,
+    ledgerSummary,
     getOrCreateSetting,
     recordContent,
     listContentForArtist,

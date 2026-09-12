@@ -32,6 +32,10 @@ function createLedgerRouter({ store }) {
     res.json({ entries: entries.map(publicEntry) });
   });
 
+  router.get('/libro/resumen', async (req, res) => {
+    res.json(await store.ledgerSummary());
+  });
+
   // Verificación del lado del servidor. No reemplaza a la del navegador: la
   // gracia del libro es justamente que no haga falta creerle a esta ruta.
   router.get('/libro/verificar', async (req, res) => {

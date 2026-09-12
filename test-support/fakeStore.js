@@ -108,6 +108,18 @@ function createFakeStore({ treasurerPhone } = {}) {
         .slice(0, limit);
     },
 
+    async ledgerSummary() {
+      const conIndice = transactions.filter((t) => t.index);
+      const suma = (accion) =>
+        conIndice.filter((t) => t.action === accion).reduce((n, t) => n + (t.amount || 0), 0);
+
+      return {
+        emitido: suma('emission'),
+        transferido: suma('transfer'),
+        movimientos: conIndice.length,
+      };
+    },
+
     async listLedgerInOrder() {
       return transactions.filter((t) => t.index).sort((a, b) => a.index - b.index);
     },

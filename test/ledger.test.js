@@ -222,6 +222,36 @@ test('what the API publishes is enough to verify the chain from outside', async 
   });
 });
 
+test('the summary counts emissions and transfers apart', async () => {
+  await withServer(async ({ get, store }) => {
+    await store.createAccount({ phoneNumber: '3000000009', pin: '1234', email: 'a@b.co', name: 'Tesorero' });
+    await store.createAccount({ phoneNumber: '3000000001', pin: '1234', email: 'a@b.co', name: 'Ana' });
+
+    const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26' });
+    await commands.emit('3000000009', ['@3000000001', '20']);
+    await commands.transfer('3000000001', ['@3000000002', '5']);
+    await commands.transfer('3000000001', ['@3000000002', '3']);
+
+    const { body } = await get('/api/libro/resumen');
+
+    assert.equal(body.emitido, 20);
+    assert.equal(body.transferido, 8);
+    assert.equal(body.movimientos, 3);
+  });
+});
+
+test('the summary is readable without an account and leaks no balances', async () => {
+  await withServer(async ({ get, store }) => {
+    await store.createAccount({ phoneNumber: '3153811758', pin: '1234', email: 'a@b.co', name: 'Ana' });
+    store._debug.users.get('3153811758').balance = 999;
+
+    const { status, body } = await get('/api/libro/resumen');
+
+    assert.equal(status, 200);
+    assert.doesNotMatch(JSON.stringify(body), /999|3153811758/);
+  });
+});
+
 test('the server verification endpoint agrees', async () => {
   await withServer(async ({ get, store }) => {
     await store.createAccount({ phoneNumber: '3000000001', pin: '1234', email: 'a@b.co', name: 'Ana' });
