@@ -56,7 +56,6 @@ function createApp({ config, store, sessions, commands, sendMessage, sms, whatsa
   app.get('/', (req, res) => {
     res.json({
       status: `✅ ${config.botName} Bot running`,
-      email: 'sonambulosctg@gmail.com',
       version: '1.4.0-beta',
       startedAt,
       // Para poder comprobar desde afuera si las credenciales quedaron bien
