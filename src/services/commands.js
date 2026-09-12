@@ -1,4 +1,4 @@
-const { normalizePhone } = require('../utils/phone');
+const { normalizePhone, isValidPhone } = require('../utils/phone');
 const { parseAmount, parseSendArgs } = require('../utils/parse');
 
 // Comandos del bot. Reciben el store como dependencia (en vez de importar
@@ -78,7 +78,7 @@ function createCommands(store, config, canales = {}) {
     const amount = parseAmount(args[1]);
 
     if (Number.isNaN(amount)) return '❌ Cantidad debe ser número > 0';
-    if (!toPhone) return '❌ Número de destino inválido';
+    if (!isValidPhone(args[0])) return '❌ Número de destino inválido. Deben ser los 10 dígitos.';
     if (toPhone === phoneNumber) return '❌ No puedes transferirte a ti mismo.';
 
     const result = await store.transfer(phoneNumber, toPhone, amount);
@@ -122,39 +122,76 @@ function createCommands(store, config, canales = {}) {
     return commands.transfer(phoneNumber, [parsed.target, String(parsed.amount)]);
   };
 
+  // Emite a una persona o a varias de una vez:
+  //   /emit @3001112233 10
+  //   /emit @3001112233 @3004445566 @3007778899 10
+  //
+  // Lo segundo existe porque en la puerta del evento el tesorero tiene una
+  // fila enfrente, y emitir de a una persona por comando lo vuelve el cuello
+  // de botella de la noche.
   commands.emit = async (phoneNumber, args) => {
     const user = await store.getUser(phoneNumber);
     if (!user || !user.isAdmin) return '❌ No tienes permisos de admin.';
-    if (args.length < 2) return '❌ Formato: /emit @usuario X [event_id]';
 
-    const toPhone = normalizePhone(args[0].replace('@', ''));
-    const amount = parseAmount(args[1]);
-    const eventId = args[2] || config.defaultEventId;
+    const etiquetados = args.filter((a) => a.startsWith('@'));
+    const resto = args.filter((a) => !a.startsWith('@'));
 
+    // Con @ se admiten varios destinos; sin @ se conserva la forma posicional
+    // de siempre (/emit 3001112233 10) para no romper lo que ya se usaba.
+    const crudos = etiquetados.length ? etiquetados.map((a) => a.replace('@', '')) : [args[0] || ''];
+    const invalidos = crudos.filter((a) => !isValidPhone(a));
+    const destinos = crudos.filter(isValidPhone).map(normalizePhone);
+
+    const amount = parseAmount(etiquetados.length ? resto[0] : args[1]);
+    const eventId = (etiquetados.length ? resto[1] : args[2]) || config.defaultEventId;
+
+    if (!destinos.length) return '❌ Formato: /emit @usuario [@usuario2 ...] X';
+    // Se corta antes de emitir nada: emitirle a los buenos y avisar de los
+    // malos después dejaría al tesorero sin saber a quién le quedó faltando.
+    if (invalidos.length) {
+      return `❌ Estos números no tienen 10 dígitos: ${invalidos.join(', ')}. No se emitió nada.`;
+    }
     if (Number.isNaN(amount)) return '❌ Cantidad debe ser número > 0';
-    if (!toPhone) return '❌ Número de destino inválido';
 
-    const { toUser, coinIds } = await store.emitCoins(toPhone, amount, eventId);
+    // Sin esto, repetir un número en la lista le emitiría dos veces.
+    const unicos = Array.from(new Set(destinos));
+    const hechas = [];
 
-    const entry = await store.recordTransaction({
-      from: 'TESORERO',
-      to: toPhone,
-      fromLabel: 'TESORERO',
-      toLabel: etiqueta(toUser),
-      amount,
-      coinIds,
-      action: 'emission',
-      description: `Tesorero emitió ${amount} monedas a ${toUser.name}`,
-      eventId,
+    for (const toPhone of unicos) {
+      const { toUser, coinIds } = await store.emitCoins(toPhone, amount, eventId);
+
+      const entry = await store.recordTransaction({
+        from: 'TESORERO',
+        to: toPhone,
+        fromLabel: 'TESORERO',
+        toLabel: etiqueta(toUser),
+        amount,
+        coinIds,
+        action: 'emission',
+        description: `Tesorero emitió ${amount} monedas a ${toUser.name}`,
+        eventId,
+      });
+
+      avisar(
+        toUser,
+        `${config.botName}: te emitieron ${amount} monedas. Tu saldo: ${toUser.balance}. ` +
+          `Movimiento #${entry.index} en el libro público.`
+      );
+
+      hechas.push({ toUser, entry });
+    }
+
+    if (hechas.length === 1) {
+      const { toUser, entry } = hechas[0];
+      return `✅ Emitidas ${amount} monedas a ${toUser.name}\n📊 Nuevo saldo: ${toUser.balance}\n🔗 Movimiento #${entry.index} en el libro`;
+    }
+
+    let msg = `✅ Emitidas ${amount} monedas a ${hechas.length} personas (${amount * hechas.length} en total):\n`;
+    hechas.forEach(({ toUser, entry }) => {
+      msg += `• ${toUser.name} → ${toUser.balance} monedas (#${entry.index})\n`;
     });
 
-    avisar(
-      toUser,
-      `${config.botName}: te emitieron ${amount} monedas. Tu saldo: ${toUser.balance}. ` +
-        `Movimiento #${entry.index} en el libro público.`
-    );
-
-    return `✅ Emitidas ${amount} monedas a ${toUser.name}\n📊 Nuevo saldo: ${toUser.balance}\n🔗 Movimiento #${entry.index} en el libro`;
+    return msg.trimEnd();
   };
 
   // /content [link] @artista1 @artista2 ... — el productor pega el link ya
@@ -225,6 +262,7 @@ function createCommands(store, config, canales = {}) {
     if (isAdmin) {
       msg += '\n👑 Admin:\n';
       msg += '/emit @usuario X — Emitir monedas\n';
+      msg += '/emit @uno @dos @tres X — Emitir a varios de una vez\n';
       msg += '/users — Listar usuarios\n';
       msg += '/content [link] @talento1 @talento2 — Publicar contenido en sus Universos\n';
       msg += '/resetpin @usuario — Generar un PIN nuevo para alguien que lo olvidó\n';

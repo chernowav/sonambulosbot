@@ -9,4 +9,12 @@ function normalizePhone(value) {
   return digitsOnly(value).slice(-10);
 }
 
-module.exports = { digitsOnly, normalizePhone };
+// normalizePhone recorta a los últimos 10 dígitos, pero no rellena: con "123"
+// devuelve "123", que parece un teléfono válido y no lo es. Sin esta
+// comprobación, un dedazo al escribir un número crea una cuenta fantasma y le
+// manda monedas reales que nadie puede recuperar.
+function isValidPhone(value) {
+  return normalizePhone(value).length === 10;
+}
+
+module.exports = { digitsOnly, normalizePhone, isValidPhone };

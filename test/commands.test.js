@@ -129,6 +129,80 @@ test('emit succeeds for the treasurer and credits the recipient', async () => {
   assert.equal(store._debug.users.get('3000000002').balance, 3);
 });
 
+test('emit reaches several people in one command', async () => {
+  const { commands, store, account } = setup('3000000009');
+  await account('3000000009', 'Tesorero');
+
+  const reply = await commands.emit('3000000009', [
+    '@3000000002',
+    '@3000000003',
+    '@3000000004',
+    '10',
+  ]);
+
+  assert.match(reply, /a 3 personas \(30 en total\)/);
+  ['3000000002', '3000000003', '3000000004'].forEach((phone) => {
+    assert.equal(store._debug.users.get(phone).balance, 10);
+  });
+
+  // Un movimiento por persona: el libro no agrupa lo que ocurrió por separado.
+  assert.equal(store._debug.transactions.length, 3);
+});
+
+test('a number repeated in the list is only paid once', async () => {
+  const { commands, store, account } = setup('3000000009');
+  await account('3000000009', 'Tesorero');
+
+  await commands.emit('3000000009', ['@3000000002', '@3000000002', '7']);
+
+  assert.equal(store._debug.users.get('3000000002').balance, 7);
+  assert.equal(store._debug.transactions.length, 1);
+});
+
+test('emit still accepts the old single positional form', async () => {
+  const { commands, store, account } = setup('3000000009');
+  await account('3000000009', 'Tesorero');
+
+  const reply = await commands.emit('3000000009', ['3000000002', '4']);
+
+  assert.match(reply, /Emitidas 4 monedas/);
+  assert.equal(store._debug.users.get('3000000002').balance, 4);
+});
+
+test('emit without an amount explains the format instead of guessing', async () => {
+  const { commands, account } = setup('3000000009');
+  await account('3000000009', 'Tesorero');
+
+  assert.match(await commands.emit('3000000009', ['@3000000002']), /Cantidad/);
+});
+
+test('a mistyped number is refused and nothing is emitted to anyone', async () => {
+  const { commands, store, account } = setup('3000000009');
+  await account('3000000009', 'Tesorero');
+
+  // Un dedazo: al segundo número le faltan dígitos.
+  const reply = await commands.emit('3000000009', ['@3000000002', '@30011', '10']);
+
+  assert.match(reply, /no tienen 10 dígitos/);
+  assert.match(reply, /No se emitió nada/);
+  // Ni al bueno, para que el tesorero no quede sin saber qué alcanzó a pasar.
+  assert.equal(store._debug.users.has('3000000002'), false);
+  assert.equal(store._debug.users.has('30011'), false);
+  assert.equal(store._debug.transactions.length, 0);
+});
+
+test('a transfer to a mistyped number is refused instead of creating a ghost account', async () => {
+  const { commands, store, account } = setup();
+  await account('3000000001', 'Ana');
+  store._debug.users.get('3000000001').balance = 10;
+
+  const reply = await commands.transfer('3000000001', ['@123', '5']);
+
+  assert.match(reply, /10 dígitos/);
+  assert.equal(store._debug.users.get('3000000001').balance, 10);
+  assert.equal(store._debug.users.has('123'), false);
+});
+
 test('content is rejected for non-admin users', async () => {
   const { commands, account } = setup();
   await account('3000000001', 'A');
