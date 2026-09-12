@@ -319,6 +319,22 @@ footer{border-top:1px solid var(--sep);background:var(--panel);padding:10px var(
   </div>
 </div>
 
+<div class="fondo" id="hojaClave" hidden>
+  <div class="hoja" role="dialog" aria-modal="true" aria-labelledby="claveTitulo">
+    <div class="agarre"></div>
+    <h2 id="claveTitulo">Clave de tesorero</h2>
+    <p class="guia">Habilita emitir monedas, ver la lista de gente y publicar contenido.</p>
+
+    <label for="cClave">Clave</label>
+    <input id="cClave" type="password" autocomplete="off" placeholder="La que está en Railway">
+
+    <div id="claveMsg"></div>
+    <button class="primary" id="btnGuardarClave" style="margin-top:16px">Guardar</button>
+    <button class="ghost" id="btnOlvidarClave" hidden>Olvidar la clave</button>
+    <button class="ghost" id="btnCerrarClave">Cancelar</button>
+  </div>
+</div>
+
 <script>
 var $ = function (id) { return document.getElementById(id); };
 var token = null;
@@ -504,14 +520,57 @@ function adminKey(value) {
   return key;
 }
 
-$('keyBtn').onclick = function () {
-  if (adminKey()) {
-    if (confirm('¿Olvidar la clave de tesorero?')) adminKey(null);
-  } else {
-    var typed = prompt('Clave de tesorero:');
-    if (typed) adminKey(typed);
-  }
+/* prompt() y confirm() no existen en todos lados: los navegadores dentro de
+   WhatsApp e Instagram los bloquean, y por ahí es justo como la gente va a
+   abrir este link en el evento. Con prompt() bloqueado, el botón de la clave
+   no hacía nada y el tesorero quedaba sin poder emitir monedas. */
+
+var comandoPendiente = null;
+
+function claveAviso(texto) {
+  $('claveMsg').textContent = texto || '';
+  $('claveMsg').style.cssText = texto
+    ? 'margin-top:14px;padding:11px 14px;border-radius:11px;background:rgba(255,122,77,.14);color:var(--err);font-size:var(--t-sub)'
+    : '';
+}
+
+function abrirClave() {
+  $('cClave').value = '';
+  claveAviso('');
+  $('btnOlvidarClave').hidden = !adminKey();
+  $('hojaClave').hidden = false;
+  $('cClave').focus();
+}
+
+function cerrarClave() {
+  $('hojaClave').hidden = true;
+  comandoPendiente = null;
+}
+
+$('keyBtn').onclick = abrirClave;
+$('btnCerrarClave').onclick = cerrarClave;
+$('hojaClave').onclick = function (e) { if (e.target === this) cerrarClave(); };
+
+$('btnGuardarClave').onclick = function () {
+  var valor = $('cClave').value.trim();
+  if (!valor) return claveAviso('Escribe la clave.');
+
+  adminKey(valor);
+  var reintentar = comandoPendiente;
+  cerrarClave();
+
+  // Si llegó aquí por un comando que quedó bloqueado, se reintenta solo.
+  if (reintentar) send(reintentar, true);
 };
+
+$('btnOlvidarClave').onclick = function () {
+  adminKey(null);
+  cerrarClave();
+};
+
+$('cClave').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); $('btnGuardarClave').click(); }
+});
 
 $('outBtn').onclick = function () { signOut(''); };
 
@@ -531,12 +590,11 @@ async function send(text, isRetry) {
     }
 
     if (reply.locked && reply.reason === 'admin' && !isRetry) {
-      var typed = prompt('Clave de tesorero:');
-      if (typed) {
-        adminKey(typed);
-        busy($('sendBtn'), false);
-        return send(text, true);
-      }
+      busy($('sendBtn'), false);
+      comandoPendiente = text;
+      abrirClave();
+      claveAviso('Ese comando necesita la clave de tesorero.');
+      return;
     }
 
     say(reply.locked ? 'bot bad' : 'bot', reply.response);
@@ -752,7 +810,9 @@ $('btnVolver').onclick = function () { $('paso2').hidden = true; $('paso1').hidd
 // Tocar por fuera o Escape cierran, como se espera de una hoja.
 $('hoja').onclick = function (e) { if (e.target === this) cerrarHoja(); };
 document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape' && !$('hoja').hidden) cerrarHoja();
+  if (e.key !== 'Escape') return;
+  if (!$('hoja').hidden) cerrarHoja();
+  if (!$('hojaClave').hidden) cerrarClave();
 });
 
 $('btnRevisar').onclick = function () {
