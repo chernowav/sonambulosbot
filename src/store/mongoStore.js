@@ -4,7 +4,7 @@ const { generatePin, hashPin } = require('../utils/pin');
 const { GENESIS, hashEntry } = require('../services/ledger');
 
 // Si dos transferencias intentan colgarse del mismo eslabón, una reintenta.
-const LEDGER_RETRIES = 6;
+const LEDGER_RETRIES = 10;
 
 // Cuántos PIN errados seguidos se toleran antes de bloquear, y por cuánto.
 // Cinco minutos hacen inviable recorrer las 10 000 combinaciones, y son poco
@@ -265,6 +265,12 @@ function createMongoStore({ treasurerPhone }) {
       );
 
       if (moved) return Transaction.create({ ...entry, visible: true });
+
+      // Sin esta espera, dos escrituras que chocan reintentan al mismo tiempo
+      // y vuelven a chocar. El azar las separa; crece con cada vuelta para que
+      // una fila larga en la barra no se atasque contra sí misma.
+      const espera = Math.floor(Math.random() * 25 * (attempt + 1));
+      await new Promise((listo) => setTimeout(listo, espera));
     }
 
     throw new Error('No se pudo escribir en el libro: demasiados movimientos a la vez.');

@@ -8,9 +8,6 @@ function createCommands(store, config, canales = {}) {
   const { sms, telegram } = canales;
   const commands = {};
 
-  // El SMS avisa; no forma parte de la transacción. Si el proveedor está
-  // lento o caído, quien transfirió no se queda esperando diez segundos
-  // frente a una pantalla congelada: el movimiento ya quedó registrado.
   // Lo que se ve de alguien en el libro público: su nombre y los últimos 4
   // dígitos, suficiente para distinguir a dos personas que se llamen igual sin
   // publicar el teléfono de nadie.
@@ -21,6 +18,10 @@ function createCommands(store, config, canales = {}) {
   // Telegram primero: es gratis y llega con el nombre del bot del evento. El
   // SMS queda de respaldo para quien no vinculó el bot, y solo sale si hay
   // credenciales configuradas.
+  //
+  // Se manda sin esperar respuesta: el aviso no es parte de la transacción, y
+  // un proveedor lento no puede dejar a alguien mirando una pantalla
+  // congelada por un movimiento que ya quedó hecho.
   function avisar(user, text) {
     if (!user) return;
 
@@ -87,16 +88,27 @@ function createCommands(store, config, canales = {}) {
       return `❌ Saldo insuficiente. Tienes: ${result.fromUser ? result.fromUser.balance : 0}`;
     }
 
-    const entry = await store.recordTransaction({
-      from: phoneNumber,
-      to: toPhone,
-      fromLabel: etiqueta(result.fromUser),
-      toLabel: etiqueta(result.toUser),
-      amount,
-      coinIds: [],
-      action: 'transfer',
-      description: `Transferencia de ${amount} monedas de ${result.fromUser.name} a ${result.toUser.name}`,
-    });
+    // El saldo ya se movió. Si el libro no alcanza a registrarlo, las monedas
+    // habrían cambiado de manos sin dejar rastro — justo lo que el libro
+    // existe para impedir. Antes de rendirse se devuelven a su dueño, para que
+    // saldos y libro nunca cuenten historias distintas.
+    let entry;
+    try {
+      entry = await store.recordTransaction({
+        from: phoneNumber,
+        to: toPhone,
+        fromLabel: etiqueta(result.fromUser),
+        toLabel: etiqueta(result.toUser),
+        amount,
+        coinIds: [],
+        action: 'transfer',
+        description: `Transferencia de ${amount} monedas de ${result.fromUser.name} a ${result.toUser.name}`,
+      });
+    } catch (error) {
+      await store.transfer(toPhone, phoneNumber, amount);
+      console.error(`Transferencia revertida, el libro no aceptó el movimiento: ${error.message}`);
+      return '❌ No se pudo registrar el movimiento en el libro. Tus monedas siguen contigo, intenta de nuevo.';
+    }
 
     // Las dos partes reciben su aviso, cada una con su propio saldo: quien
     // envía tiene tanto derecho a un comprobante como quien recibe.
@@ -160,17 +172,32 @@ function createCommands(store, config, canales = {}) {
     for (const toPhone of unicos) {
       const { toUser, coinIds } = await store.emitCoins(toPhone, amount, eventId);
 
-      const entry = await store.recordTransaction({
-        from: 'TESORERO',
-        to: toPhone,
-        fromLabel: 'TESORERO',
-        toLabel: etiqueta(toUser),
-        amount,
-        coinIds,
-        action: 'emission',
-        description: `Tesorero emitió ${amount} monedas a ${toUser.name}`,
-        eventId,
-      });
+      let entry;
+      try {
+        entry = await store.recordTransaction({
+          from: 'TESORERO',
+          to: toPhone,
+          fromLabel: 'TESORERO',
+          toLabel: etiqueta(toUser),
+          amount,
+          coinIds,
+          action: 'emission',
+          description: `Tesorero emitió ${amount} monedas a ${toUser.name}`,
+          eventId,
+        });
+      } catch (error) {
+        // Igual que en /transfer: monedas que no quedan en el libro no pueden
+        // quedar en el saldo. Se devuelven las de esta persona y se corta, con
+        // el detalle de a quiénes sí alcanzó — en medio del evento el tesorero
+        // necesita saber exactamente por dónde retomar.
+        await store.transfer(toPhone, 'TESORERO', amount).catch(() => {});
+        console.error(`Emisión revertida para ${toPhone}: ${error.message}`);
+
+        const yaHechas = hechas.map((h) => h.toUser.name).join(', ') || 'nadie';
+        return `❌ El libro no aceptó la emisión a ${toUser.name}; se revirtió.
+✅ Alcanzaron a recibir: ${yaHechas}.
+Vuelve a emitir solo a los que faltan.`;
+      }
 
       avisar(
         toUser,

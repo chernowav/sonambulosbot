@@ -286,3 +286,65 @@ test('help works for someone who has not logged in yet', async () => {
   const reply = await commands.help(null);
   assert.match(reply, /Comandos Sonámbulos/);
 });
+
+/* ---------- Saldos y libro no pueden separarse ---------- */
+
+// Un store igual al normal salvo que el libro rechaza toda escritura.
+function setupConLibroRoto(treasurerPhone) {
+  const store = createFakeStore({ treasurerPhone });
+  store.recordTransaction = async () => {
+    throw new Error('libro caído');
+  };
+
+  const commands = createCommands(store, { defaultEventId: 'event_test', botName: 'Piso 26' });
+  const account = (phoneNumber, name) =>
+    store.createAccount({ phoneNumber, pin: '1234', email: 'a@b.co', name });
+
+  return { store, commands, account };
+}
+
+test('a transfer that cannot be written to the ledger gives the coins back', async () => {
+  const { store, commands, account } = setupConLibroRoto();
+  await account('3000000001', 'Ana');
+  await account('3000000002', 'Beto');
+  store._debug.users.get('3000000001').balance = 10;
+
+  const reply = await commands.transfer('3000000001', ['@3000000002', '4']);
+
+  assert.match(reply, /No se pudo registrar/);
+  // Lo que importa: nadie perdió ni ganó monedas sin que quedara escrito.
+  assert.equal(store._debug.users.get('3000000001').balance, 10);
+  assert.equal(store._debug.users.get('3000000002').balance, 0);
+});
+
+test('an emission that cannot be written to the ledger gives the coins back', async () => {
+  const { store, commands, account } = setupConLibroRoto('3000000009');
+  await account('3000000009', 'Tesorero');
+
+  const reply = await commands.emit('3000000009', ['@3000000002', '15']);
+
+  assert.match(reply, /no aceptó la emisión/);
+  assert.equal(store._debug.users.get('3000000002').balance, 0);
+});
+
+test('a failed bulk emission says who already received', async () => {
+  const store = createFakeStore({ treasurerPhone: '3000000009' });
+  const real = store.recordTransaction;
+  let escrituras = 0;
+
+  // Falla en la segunda persona: la primera ya quedó registrada.
+  store.recordTransaction = async (data) => {
+    escrituras += 1;
+    if (escrituras > 1) throw new Error('libro caído');
+    return real(data);
+  };
+
+  const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26' });
+  await store.createAccount({ phoneNumber: '3000000009', pin: '1234', email: 'a@b.co', name: 'Tesorero' });
+
+  const reply = await commands.emit('3000000009', ['@3000000002', '@3000000003', '10']);
+
+  assert.match(reply, /Alcanzaron a recibir/);
+  assert.equal(store._debug.users.get('3000000002').balance, 10);
+  assert.equal(store._debug.users.get('3000000003').balance, 0);
+});
