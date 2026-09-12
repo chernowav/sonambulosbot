@@ -400,3 +400,41 @@ test('a bar payment lands in the public ledger like any other movement', async (
   assert.match(libro[0].toLabel, /Bar Piso 26/);
   assert.equal(libro[0].amount, 6);
 });
+
+/* ---------- El orden de los argumentos no importa ---------- */
+
+test('the amount can come before or after the number', async () => {
+  for (const args of [['@3000000002', '4'], ['4', '@3000000002']]) {
+    const { commands, store, account } = setup();
+    await account('3000000001', 'Ana');
+    await account('3000000002', 'Beto');
+    store._debug.users.get('3000000001').balance = 10;
+
+    const reply = await commands.transfer('3000000001', args);
+
+    assert.match(reply, /Transferencia completada/, `falló con ${JSON.stringify(args)}`);
+    assert.equal(store._debug.users.get('3000000002').balance, 4);
+  }
+});
+
+test('the order does not matter without the @ either', async () => {
+  const { commands, store, account } = setup();
+  await account('3000000001', 'Ana');
+  store._debug.users.get('3000000001').balance = 10;
+
+  const reply = await commands.transfer('3000000001', ['7', '3000000002']);
+
+  assert.match(reply, /Transferencia completada/);
+  assert.equal(store._debug.users.get('3000000002').balance, 7);
+});
+
+test('two numbers that are neither a phone are still refused', async () => {
+  const { commands, store, account } = setup();
+  await account('3000000001', 'Ana');
+  store._debug.users.get('3000000001').balance = 10;
+
+  const reply = await commands.transfer('3000000001', ['5', '10']);
+
+  assert.match(reply, /destino inválido/);
+  assert.equal(store._debug.users.get('3000000001').balance, 10);
+});

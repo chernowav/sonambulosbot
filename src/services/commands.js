@@ -83,14 +83,23 @@ function createCommands(store, config, canales = {}) {
   // Quién transfiere ya está probado por la sesión (el webhook saca el
   // teléfono del token firmado, no del body), así que acá no se vuelve a
   // pedir el PIN.
+  // El orden da igual: /enviar 5 @3001112233 y /enviar @3001112233 5 hacen lo
+  // mismo. Un teléfono tiene diez dígitos y una cantidad no, así que no hay
+  // forma de confundirlos — y nadie tiene que acordarse de cuál va primero
+  // con la fila del bar esperando.
   commands.transfer = async (phoneNumber, args) => {
-    if (args.length < 2) return '❌ Formato: /transfer @usuario X';
+    if (args.length < 2) return '❌ Formato: /enviar @numero X  (o /enviar X @numero)';
 
-    const toPhone = normalizePhone(args[0].replace('@', ''));
-    const amount = parseAmount(args[1]);
+    const destino = args.find((a) => a.startsWith('@') || isValidPhone(a));
+    const cantidad = args.find((a) => a !== destino);
+
+    if (!destino) return '❌ Número de destino inválido. Deben ser los 10 dígitos.';
+
+    const toPhone = normalizePhone(destino.replace('@', ''));
+    const amount = parseAmount(cantidad);
 
     if (Number.isNaN(amount)) return '❌ Cantidad debe ser número > 0';
-    if (!isValidPhone(args[0])) return '❌ Número de destino inválido. Deben ser los 10 dígitos.';
+    if (!isValidPhone(destino)) return '❌ Número de destino inválido. Deben ser los 10 dígitos.';
     if (toPhone === phoneNumber) return '❌ No puedes transferirte a ti mismo.';
 
     const result = await store.transfer(phoneNumber, toPhone, amount);
@@ -293,7 +302,7 @@ Vuelve a emitir solo a los que faltan.`;
     let msg = `📖 Comandos de ${config.botName}:\n\n`;
     msg += '/saldo — Ver cuántas monedas tienes\n';
     msg += '/bar X — Pagar X monedas en el bar\n';
-    msg += '/enviar @numero X — Enviarle X monedas a alguien\n';
+    msg += '/enviar 5 @numero — Enviarle monedas (el orden da igual)\n';
     msg += '/historial — Tus últimos movimientos\n';
     msg += '/nombre [como te llamas] — Cambiar tu nombre\n';
     msg += '/ayuda — Esta lista\n';
