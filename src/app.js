@@ -13,6 +13,11 @@ const { createLedgerRouter } = require('./routes/ledger');
 function createApp({ config, store, sessions, commands, sendMessage }) {
   const handleIncoming = createWebhookHandler({ commands, config, sendMessage, sessions });
 
+  // Momento de arranque de esta instancia. Sirve para saber si el servidor se
+  // reinició — sin este dato no hay forma de comprobar desde afuera que una
+  // sesión sobrevivió a un redespliegue y no le pegamos a la instancia vieja.
+  const startedAt = new Date().toISOString();
+
   const app = express();
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json());
@@ -46,7 +51,8 @@ function createApp({ config, store, sessions, commands, sendMessage }) {
     res.json({
       status: `✅ ${config.botName} Bot running`,
       email: 'sonambulosctg@gmail.com',
-      version: '1.2.0-beta',
+      version: '1.2.1-beta',
+      startedAt,
       endpoints: {
         'GET /chat': 'Consola web (crear cuenta / iniciar sesión)',
         'GET /libro': 'Libro público de movimientos, sin cuenta',
