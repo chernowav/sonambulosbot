@@ -120,6 +120,12 @@ header{display:flex;justify-content:space-between;align-items:center;gap:12px;pa
 .iconbtn{min-height:var(--tap);min-width:var(--tap);padding:0 13px;border:1px solid var(--sep);border-radius:var(--r-ctl);background:none;color:var(--mu);font-size:var(--t-foot);font-weight:500}
 .iconbtn.armed{border-color:var(--neon);color:var(--neon)}
 
+/* Invitación a conectar Telegram. Aparece solo mientras no esté vinculado y
+   desaparece sola: quien ya lo hizo no tiene por qué seguir viéndola. */
+.tg{margin:14px var(--pad) 0;background:var(--panel);border:1px solid var(--sep);border-radius:var(--r-card);padding:14px 16px;display:flex;flex-direction:column;gap:11px}
+.tg p{margin:0;font-size:var(--t-sub);color:var(--mu)}
+.tg a{display:flex;align-items:center;justify-content:center;min-height:var(--tap);border-radius:var(--r-ctl);background:var(--neon);color:var(--on-neon);font-weight:600;font-size:var(--t-sub);text-decoration:none}
+
 #log{flex:1;overflow-y:auto;padding:16px var(--pad);display:flex;flex-direction:column;gap:11px}
 .m{max-width:86%;padding:11px 14px;border-radius:19px;white-space:pre-wrap;word-break:break-word;font-size:var(--t-callout)}
 .mine{align-self:flex-end;background:var(--neon);color:var(--on-neon);border-bottom-right-radius:6px;font-weight:500}
@@ -208,6 +214,11 @@ footer{border-top:1px solid var(--sep);background:var(--panel);padding:10px var(
       <button class="iconbtn" id="outBtn">Salir</button>
     </div>
   </header>
+
+  <div class="tg" id="tgAviso" hidden>
+    <p>Conecta Telegram y te avisamos ahí cada vez que envíes o recibas monedas, con el número de movimiento en el libro.</p>
+    <a id="tgLink" target="_blank" rel="noopener">Conectar Telegram</a>
+  </div>
 
   <div id="log" role="log" aria-live="polite" aria-label="Conversación"></div>
 
@@ -351,6 +362,12 @@ function enterApp(session) {
   if (!$('log').childElementCount) {
     say('bot', '👋 Hola ' + session.user.name + '. Escribe /help para ver qué puedes hacer.');
   }
+
+  // El primer vistazo va callado: sirve para ponerse al día con lo que ya
+  // pasó, sin repetir en pantalla toda la historia vieja.
+  mirarNovedades(true);
+  arrancarVigilante();
+  revisarTelegram();
 }
 
 function paintUser(user) {
@@ -363,6 +380,13 @@ function paintUser(user) {
 function signOut(reason) {
   token = null;
   store('sb.token', null);
+  detenerVigilante();
+  ultimoVisto = 0;
+  $('tgAviso').hidden = true;
+  // El historial se borra siempre, no solo al tocar Salir: en un celular
+  // prestado, la siguiente persona no tiene por qué ver los movimientos de
+  // quien lo usó antes.
+  $('log').textContent = '';
   $('app').hidden = true;
   $('auth').hidden = false;
   showTab('login');
@@ -400,10 +424,7 @@ $('keyBtn').onclick = function () {
   }
 };
 
-$('outBtn').onclick = function () {
-  $('log').textContent = '';
-  signOut('');
-};
+$('outBtn').onclick = function () { signOut(''); };
 
 async function send(text, isRetry) {
   if (!text) return;
@@ -430,7 +451,7 @@ async function send(text, isRetry) {
     }
 
     say(reply.locked ? 'bot bad' : 'bot', reply.response);
-    refreshBalance();
+    mirarNovedades(false);
   } catch (error) {
     say('bot bad', 'No se pudo alcanzar el bot.');
   }
@@ -439,14 +460,75 @@ async function send(text, isRetry) {
   $('input').focus();
 }
 
-async function refreshBalance() {
+/* Avisos en vivo, sin proveedor de mensajería: la consola pregunta cada pocos
+   segundos si hay movimientos míos que todavía no vi. Quien recibe monedas se
+   entera en el momento aunque no haya tocado nada.
+
+   Solo se anuncian los recibidos: lo que uno mismo envía ya se ve en pantalla
+   al ejecutar el comando, y anunciarlo otra vez sería repetirse. */
+var ultimoVisto = 0;
+var vigilante = null;
+
+async function mirarNovedades(callado) {
+  if (!token) return;
+
   try {
-    var me = await api('/api/me?token=' + encodeURIComponent(token));
-    paintUser(me.user);
+    var r = await api(
+      '/api/novedades?token=' + encodeURIComponent(token) + '&desde=' + ultimoVisto
+    );
+
+    paintUser(r.user);
+
+    r.movimientos.forEach(function (m) {
+      if (m.index > ultimoVisto) ultimoVisto = m.index;
+      if (callado || !m.recibido) return;
+
+      var unidad = m.amount === 1 ? ' moneda' : ' monedas';
+      var quien = m.action === 'emission' ? 'la tesorería' : m.otro;
+      say('bot', '💸 Recibiste ' + m.amount + unidad + ' de ' + quien + '. Movimiento #' + m.index + ' en el libro.');
+    });
   } catch (error) {
-    signOut('Tu sesión expiró. Verifica tu PIN para seguir.');
+    if (token) signOut('Tu sesión expiró. Verifica tu PIN para seguir.');
   }
 }
+
+/* Si Telegram no está configurado en el servidor, o la persona ya lo vinculó,
+   la invitación simplemente no se muestra. */
+async function revisarTelegram() {
+  if (!token) return;
+
+  try {
+    var r = await api('/api/telegram/enlace?token=' + encodeURIComponent(token));
+    if (r.vinculado || !r.url) {
+      $('tgAviso').hidden = true;
+      return;
+    }
+    $('tgLink').href = r.url;
+    $('tgAviso').hidden = false;
+  } catch (error) {
+    $('tgAviso').hidden = true;
+  }
+}
+
+function arrancarVigilante() {
+  detenerVigilante();
+  vigilante = setInterval(function () {
+    // Con la pestaña en segundo plano no tiene sentido preguntar.
+    if (document.visibilityState === 'visible') mirarNovedades(false);
+  }, 7000);
+}
+
+function detenerVigilante() {
+  if (vigilante) { clearInterval(vigilante); vigilante = null; }
+}
+
+/* Al volver a la pestaña se revisa de una, sin esperar el siguiente turno. */
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState !== 'visible' || !token) return;
+  mirarNovedades(false);
+  // Al volver de Telegram la vinculación ya puede estar hecha.
+  revisarTelegram();
+});
 
 $('sendBtn').onclick = function () { send($('input').value.trim()); };
 $('input').onkeydown = function (event) {

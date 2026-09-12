@@ -24,15 +24,31 @@ importa para el evento — **un registro público, íntegro y auditable**.
 - `GET /api/libro/verificar` hace la misma comprobación del lado del servidor,
   como conveniencia.
 
-## Avisos por SMS
+## Avisos
 
-Quien recibe monedas recibe un mensaje de texto con el monto, su nuevo saldo y
-el número de movimiento en el libro. Se envía por la API REST de Twilio
-(`src/services/sms.js`), sin el SDK.
+Las dos partes de cada transferencia reciben un aviso con el monto, su nuevo
+saldo y el número de movimiento en el libro. Hay tres canales, en este orden:
 
-El aviso va aparte de la transacción: si el proveedor está caído, el movimiento
-igual queda registrado y quien transfirió no espera a que Twilio responda. Sin
-credenciales configuradas, la app funciona normal y no manda nada.
+1. **Telegram** (`src/services/telegram.js`) — el principal. La API de bots es
+   gratis y sin cuotas para esta escala, no pide cuenta de empresa ni
+   aprobación de plantillas. A cambio, Telegram no deja escribirle a quien no
+   habló primero con el bot: por eso la consola ofrece un enlace de
+   vinculación y la persona le da Start una vez.
+2. **SMS** (`src/services/sms.js`) — respaldo para quien no vinculó Telegram.
+   Los operadores cobran por mensaje, así que esto sí cuesta.
+3. **La consola misma** — mientras la página está abierta, pregunta cada pocos
+   segundos si hay movimientos nuevos y los muestra al instante. Gratis y sin
+   proveedor, pero solo funciona con la página abierta.
+
+El aviso va aparte de la transacción (*fire and forget*): si un proveedor está
+caído, el movimiento igual queda registrado y quien transfirió no espera a que
+responda. Sin ningún canal configurado, la app funciona normal.
+
+Para crear el bot: escríbele a **@BotFather** en Telegram, `/newbot`, y copia el
+token en `TELEGRAM_BOT_TOKEN` y el nombre de usuario del bot (sin arroba) en
+`TELEGRAM_BOT_USERNAME`. El webhook se registra solo al arrancar, protegido con
+un secreto derivado del secreto de sesión — la URL del webhook es pública y sin
+eso cualquiera podría inventarse actualizaciones.
 
 ## Stack
 

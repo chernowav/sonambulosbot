@@ -66,6 +66,36 @@ function createAuthRouter({ store, sessions }) {
     res.json({ user: publicUser(user) });
   });
 
+  // Movimientos míos que todavía no había visto, más el saldo al día. La
+  // consola pregunta cada pocos segundos, y así quien recibe monedas se entera
+  // en el momento sin que haga falta pagarle a un proveedor de SMS.
+  router.get('/novedades', async (req, res) => {
+    const session = sessions.verify(req.query.token);
+    if (!session) return res.status(401).json({ error: 'Sesión expirada.' });
+
+    const user = await store.getUser(session.phoneNumber);
+    if (!user) return res.status(401).json({ error: 'Sesión expirada.' });
+
+    const movimientos = await store.listMovementsSince(
+      session.phoneNumber,
+      req.query.desde
+    );
+
+    res.json({
+      user: publicUser(user),
+      movimientos: movimientos.map((m) => {
+        const recibido = m.to === session.phoneNumber;
+        return {
+          index: m.index,
+          action: m.action,
+          amount: m.amount,
+          recibido,
+          otro: recibido ? m.fromLabel : m.toLabel,
+        };
+      }),
+    });
+  });
+
   return router;
 }
 

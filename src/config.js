@@ -29,8 +29,19 @@ const config = {
   botName: process.env.BOT_NAME || 'Piso 26',
   defaultEventId: process.env.EVENT_ID || 'event_oct3_2026',
 
-  // Avisos por SMS de cada movimiento. Sin credenciales, la app funciona
-  // igual pero sin mandar nada.
+  // Canal principal de avisos: gratis, sin cuenta de empresa y sin aprobación
+  // de plantillas. Se crea con @BotFather en Telegram.
+  telegram: {
+    botToken: process.env.TELEGRAM_BOT_TOKEN || '',
+    botUsername: (process.env.TELEGRAM_BOT_USERNAME || '').replace('@', ''),
+    // Railway expone el dominio solo; el webhook necesita la URL completa.
+    publicUrl:
+      process.env.PUBLIC_URL ||
+      (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : ''),
+  },
+
+  // Respaldo de pago para quien no vincule Telegram. Sin credenciales, la app
+  // funciona igual pero sin mandar nada.
   sms: {
     accountSid: process.env.TWILIO_ACCOUNT_SID || '',
     authToken: process.env.TWILIO_AUTH_TOKEN || '',

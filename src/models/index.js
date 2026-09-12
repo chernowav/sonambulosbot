@@ -13,6 +13,12 @@ const userSchema = new mongoose.Schema({
   // de inicio de sesión: se verifica una vez al entrar y a partir de ahí vale
   // el token de sesión. Ver src/utils/pin.js y src/services/sessions.js.
   pinHash: String,
+
+  // Telegram no deja escribirle a quien no habló primero con el bot, así que
+  // hay que guardar el chat al que se puede mandar. El código de vinculación
+  // es de un solo uso: viaja en el enlace y se consume al enganchar.
+  telegramChatId: String,
+  telegramLinkCode: { type: String, index: true, sparse: true },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });

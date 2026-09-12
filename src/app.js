@@ -5,12 +5,13 @@ const { createWebhookHandler } = require('./routes/webhook');
 const { createAdminRouter } = require('./routes/admin');
 const { createAuthRouter } = require('./routes/auth');
 const { createLedgerRouter } = require('./routes/ledger');
+const { createTelegramRouter, createTelegramApiRouter } = require('./routes/telegram');
 
 // Recibe todo lo que necesita como parámetro (store, sessions, ...) en vez de
 // construirlo, para que test/ pueda levantar la misma app con un store en
 // memoria y hablarle por HTTP sin Mongo de por medio. server.js es el que
 // arma las dependencias reales.
-function createApp({ config, store, sessions, commands, sendMessage, sms }) {
+function createApp({ config, store, sessions, commands, sendMessage, sms, telegram }) {
   const handleIncoming = createWebhookHandler({ commands, config, sendMessage, sessions });
 
   // Momento de arranque de esta instancia. Sirve para saber si el servidor se
@@ -40,6 +41,11 @@ function createApp({ config, store, sessions, commands, sendMessage, sms }) {
   app.use('/api', createAuthRouter({ store, sessions }));
   app.use('/api', createLedgerRouter({ store }));
 
+  if (telegram) {
+    app.use('/api', createTelegramApiRouter({ store, sessions, telegram }));
+    app.use('/telegram', createTelegramRouter({ store, sessions, telegram, config }));
+  }
+
   // Soporta formato Twilio (Body/From) o JSON simple (message/phone) por
   // igual; ambas rutas comparten la misma lógica en src/routes/webhook.js.
   app.post('/webhook/sms', handleIncoming);
@@ -55,6 +61,7 @@ function createApp({ config, store, sessions, commands, sendMessage, sms }) {
       startedAt,
       // Para poder comprobar desde afuera si las credenciales quedaron bien
       // puestas, sin tener que mandar un mensaje de verdad para averiguarlo.
+      telegram: telegram && telegram.enabled ? 'configurado' : 'sin configurar',
       sms: sms && sms.enabled ? 'configurado' : 'sin configurar',
       claveTesorero: config.adminPasswordConfigurada
         ? 'configurada'

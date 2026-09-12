@@ -8,6 +8,7 @@ const { createMessenger } = require('./src/services/messaging');
 const { createCommands } = require('./src/services/commands');
 const { createSessions } = require('./src/services/sessions');
 const { createSms } = require('./src/services/sms');
+const { createTelegram } = require('./src/services/telegram');
 
 // El secreto de sesión tiene que sobrevivir a los reinicios: si cambia, las
 // firmas emitidas antes dejan de validar y se cierra la sesión de todo el
@@ -33,17 +34,38 @@ async function main() {
   await db.connect(config.mongodbUri);
 
   const store = createMongoStore({ treasurerPhone: config.treasurerPhone });
-  const sessions = createSessions({ secret: await resolveSessionSecret(store) });
-  const sms = createSms(config.sms);
-  const sendMessage = createMessenger();
-  const commands = createCommands(store, config, sms);
+  const sessionSecret = await resolveSessionSecret(store);
+  const sessions = createSessions({ secret: sessionSecret });
 
-  if (!sms.enabled) {
-    console.warn('⚠️ SMS desactivado: falta TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN o TWILIO_FROM.');
-    console.warn('   Las transferencias funcionan, pero nadie recibe el aviso por mensaje.');
+  const sms = createSms(config.sms);
+  const telegram = createTelegram({
+    ...config.telegram,
+    // Derivado del secreto de sesión, que ya es estable entre reinicios: así
+    // el secreto del webhook no es una variable más que configurar, y sigue
+    // siendo el mismo que se registró en Telegram.
+    secretToken: crypto.createHash('sha256').update(`${sessionSecret}:telegram`).digest('hex'),
+  });
+
+  const sendMessage = createMessenger();
+  const commands = createCommands(store, config, { sms, telegram });
+
+  if (telegram.enabled) {
+    const hook = await telegram.registerWebhook();
+    console.log(
+      hook.ok
+        ? '🤖 Telegram conectado y webhook registrado.'
+        : `⚠️ Telegram configurado pero el webhook no quedó: ${hook.reason || ''}`
+    );
+  } else {
+    console.warn('⚠️ Telegram desactivado: falta TELEGRAM_BOT_TOKEN.');
   }
 
-  const app = createApp({ config, store, sessions, commands, sendMessage, sms });
+  if (!telegram.enabled && !sms.enabled) {
+    console.warn('⚠️ Nadie recibe avisos: no hay ni Telegram ni SMS configurados.');
+    console.warn('   Las transferencias funcionan igual y se ven en la consola y en /libro.');
+  }
+
+  const app = createApp({ config, store, sessions, commands, sendMessage, sms, telegram });
 
   app.listen(config.port, () => {
     console.log(`🚀 ${config.botName} corriendo en el puerto ${config.port}`);

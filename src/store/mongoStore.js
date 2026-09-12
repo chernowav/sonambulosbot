@@ -138,6 +138,38 @@ function createMongoStore({ treasurerPhone }) {
     }
   }
 
+  async function createTelegramLinkCode(phoneNumber) {
+    const code = crypto.randomBytes(6).toString('base64url');
+    const user = await User.findOneAndUpdate(
+      { phoneNumber },
+      { $set: { telegramLinkCode: code } },
+      { new: true }
+    );
+
+    return user ? code : null;
+  }
+
+  // Consume el código al mismo tiempo que engancha el chat: hacerlo en una
+  // sola operación evita que dos Start con el mismo enlace queden pegados a
+  // la misma cuenta.
+  async function linkTelegram(code, chatId) {
+    if (!code) return null;
+
+    return User.findOneAndUpdate(
+      { telegramLinkCode: code },
+      { $set: { telegramChatId: String(chatId) }, $unset: { telegramLinkCode: '' } },
+      { new: true }
+    );
+  }
+
+  async function unlinkTelegram(phoneNumber) {
+    return User.findOneAndUpdate(
+      { phoneNumber },
+      { $unset: { telegramChatId: '', telegramLinkCode: '' } },
+      { new: true }
+    );
+  }
+
   async function setName(phoneNumber, name) {
     return User.findOneAndUpdate(
       { phoneNumber },
@@ -197,6 +229,18 @@ function createMongoStore({ treasurerPhone }) {
     }
 
     throw new Error('No se pudo escribir en el libro: demasiados movimientos a la vez.');
+  }
+
+  // Movimientos míos posteriores al que ya vi. Es lo que permite avisarle a
+  // alguien que le llegaron monedas mientras tenía la consola abierta, sin
+  // depender de ningún proveedor de mensajería.
+  async function listMovementsSince(phoneNumber, sinceIndex = 0, limit = 20) {
+    return Transaction.find({
+      index: { $gt: Number(sinceIndex) || 0 },
+      $or: [{ from: phoneNumber }, { to: phoneNumber }],
+    })
+      .sort({ index: 1 })
+      .limit(limit);
   }
 
   // El libro completo, del más nuevo al más viejo, para mostrarlo por páginas.
@@ -265,11 +309,15 @@ function createMongoStore({ treasurerPhone }) {
     listTransactionsFor,
     listLedger,
     listLedgerInOrder,
+    listMovementsSince,
     getOrCreateSetting,
     recordContent,
     listContentForArtist,
     createAccount,
     setName,
+    createTelegramLinkCode,
+    linkTelegram,
+    unlinkTelegram,
     verifyPin,
     resetPin,
   };

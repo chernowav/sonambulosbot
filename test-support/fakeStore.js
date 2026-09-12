@@ -86,6 +86,17 @@ function createFakeStore({ treasurerPhone } = {}) {
       return entry;
     },
 
+    async listMovementsSince(phoneNumber, sinceIndex = 0, limit = 20) {
+      return transactions
+        .filter(
+          (t) =>
+            t.index > (Number(sinceIndex) || 0) &&
+            (t.from === phoneNumber || t.to === phoneNumber)
+        )
+        .sort((a, b) => a.index - b.index)
+        .slice(0, limit);
+    },
+
     async listLedger({ limit = 50, before } = {}) {
       return transactions
         .filter((t) => t.index && (!before || t.index < Number(before)))
@@ -131,6 +142,31 @@ function createFakeStore({ treasurerPhone } = {}) {
       user.pin = pin;
       users.set(phoneNumber, user);
       return { ok: true, user };
+    },
+
+    async createTelegramLinkCode(phoneNumber) {
+      const user = users.get(phoneNumber);
+      if (!user) return null;
+      user.telegramLinkCode = `codigo-${phoneNumber.slice(-4)}`;
+      return user.telegramLinkCode;
+    },
+
+    async linkTelegram(code, chatId) {
+      if (!code) return null;
+      const user = Array.from(users.values()).find((u) => u.telegramLinkCode === code);
+      if (!user) return null;
+
+      user.telegramChatId = String(chatId);
+      delete user.telegramLinkCode;
+      return user;
+    },
+
+    async unlinkTelegram(phoneNumber) {
+      const user = users.get(phoneNumber);
+      if (!user) return null;
+      delete user.telegramChatId;
+      delete user.telegramLinkCode;
+      return user;
     },
 
     async setName(phoneNumber, name) {

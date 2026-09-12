@@ -23,7 +23,7 @@ function fakeSms({ enabled = true, fail = false } = {}) {
 
 async function setup(sms) {
   const store = createFakeStore({ treasurerPhone: '3000000009' });
-  const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26' }, sms);
+  const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26' }, { sms });
   const account = (phoneNumber, name) =>
     store.createAccount({ phoneNumber, pin: '1234', email: 'a@b.co', name });
 
@@ -51,16 +51,35 @@ test('phone numbers are put into the format the provider expects', () => {
   assert.equal(sms.toE164('573153811758'), '+573153811758');
 });
 
-test('whoever receives coins gets a text about it', async () => {
+test('both sides of a transfer get a text, each with their own balance', async () => {
   const sms = fakeSms();
   const { commands } = await setup(sms);
 
   await commands.transfer('3000000001', ['@3000000002', '4']);
 
-  assert.equal(sms.sent.length, 1);
-  assert.equal(sms.sent[0].phoneNumber, '3000000002');
-  assert.match(sms.sent[0].text, /recibiste 4 monedas de Ana/);
-  assert.match(sms.sent[0].text, /Movimiento #1/);
+  assert.equal(sms.sent.length, 2);
+
+  const recibe = sms.sent.find((m) => m.phoneNumber === '3000000002');
+  assert.match(recibe.text, /recibiste 4 monedas de Ana/);
+  assert.match(recibe.text, /Tu saldo: 4/);
+  assert.match(recibe.text, /Movimiento #1/);
+
+  const envia = sms.sent.find((m) => m.phoneNumber === '3000000001');
+  assert.match(envia.text, /enviaste 4 monedas a Beto/);
+  assert.match(envia.text, /Tu saldo: 16/);
+  assert.match(envia.text, /Movimiento #1/);
+});
+
+test('/send notifies both sides too', async () => {
+  const sms = fakeSms();
+  const { commands } = await setup(sms);
+
+  await commands.send('3000000001', ['2', 'tokens', 'to', '@3000000002']);
+
+  assert.deepEqual(
+    sms.sent.map((m) => m.phoneNumber).sort(),
+    ['3000000001', '3000000002']
+  );
 });
 
 test('an emission also texts the person who got the coins', async () => {

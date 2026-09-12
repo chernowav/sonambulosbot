@@ -4,7 +4,8 @@ const { parseAmount, parseSendArgs } = require('../utils/parse');
 // Comandos del bot. Reciben el store como dependencia (en vez de importar
 // los modelos de Mongoose directamente) para poder probarlos con un store
 // en memoria en test/commands.test.js.
-function createCommands(store, config, sms) {
+function createCommands(store, config, canales = {}) {
+  const { sms, telegram } = canales;
   const commands = {};
 
   // El SMS avisa; no forma parte de la transacción. Si el proveedor está
@@ -17,11 +18,23 @@ function createCommands(store, config, sms) {
     return `${user.name} @${String(user.phoneNumber).slice(-4)}`;
   }
 
-  function avisar(phoneNumber, text) {
-    if (!sms || !sms.enabled) return;
-    sms.send(phoneNumber, text).catch((error) => {
-      console.error(`No se pudo avisar a ${phoneNumber}: ${error.message}`);
-    });
+  // Telegram primero: es gratis y llega con el nombre del bot del evento. El
+  // SMS queda de respaldo para quien no vinculó el bot, y solo sale si hay
+  // credenciales configuradas.
+  function avisar(user, text) {
+    if (!user) return;
+
+    const fallo = (canal) => (error) =>
+      console.error(`No se pudo avisar por ${canal}: ${error.message}`);
+
+    if (telegram && telegram.enabled && user.telegramChatId) {
+      telegram.send(user.telegramChatId, text).catch(fallo('Telegram'));
+      return;
+    }
+
+    if (sms && sms.enabled) {
+      sms.send(user.phoneNumber, text).catch(fallo('SMS'));
+    }
   }
 
   // La cuenta se crea desde la pantalla de registro (POST /api/signup), que es
@@ -85,10 +98,18 @@ function createCommands(store, config, sms) {
       description: `Transferencia de ${amount} monedas de ${result.fromUser.name} a ${result.toUser.name}`,
     });
 
+    // Las dos partes reciben su aviso, cada una con su propio saldo: quien
+    // envía tiene tanto derecho a un comprobante como quien recibe.
     avisar(
-      toPhone,
+      result.toUser,
       `${config.botName}: recibiste ${amount} monedas de ${result.fromUser.name}. ` +
         `Tu saldo: ${result.toUser.balance}. Movimiento #${entry.index} en el libro público.`
+    );
+
+    avisar(
+      result.fromUser,
+      `${config.botName}: enviaste ${amount} monedas a ${result.toUser.name}. ` +
+        `Tu saldo: ${result.fromUser.balance}. Movimiento #${entry.index} en el libro público.`
     );
 
     return `✅ Transferencia completada!\n📤 Enviaste: ${amount} monedas\n💰 Tu nuevo saldo: ${result.fromUser.balance}\n🔗 Movimiento #${entry.index} en el libro`;
@@ -128,7 +149,7 @@ function createCommands(store, config, sms) {
     });
 
     avisar(
-      toPhone,
+      toUser,
       `${config.botName}: te emitieron ${amount} monedas. Tu saldo: ${toUser.balance}. ` +
         `Movimiento #${entry.index} en el libro público.`
     );
