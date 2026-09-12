@@ -104,6 +104,11 @@ function createAuthRouter({ store, sessions }) {
           amount: m.amount,
           recibido,
           otro: recibido ? m.fromLabel : m.toLabel,
+          // El teléfono de la contraparte, para poder ofrecer "enviar de
+          // nuevo" sin que haya que volver a escribirlo. Solo sale en el
+          // historial de quien ya transó con esa persona, nunca en el libro
+          // público.
+          otroTelefono: recibido ? m.from : m.to,
         };
       }),
     });

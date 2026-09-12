@@ -105,6 +105,52 @@ form{display:flex;flex-direction:column;gap:16px}
 #msg.bad{background:rgba(255,122,77,.14);color:var(--err)}
 #msg.good{background:rgba(79,224,168,.14);color:var(--ok)}
 
+/* ---------------- Saldo y acción principal ---------------- */
+
+/* El saldo es lo que la gente viene a mirar, así que deja de ser un dato
+   chiquito del encabezado. Y enviar monedas deja de exigir escribir la
+   sintaxis de un comando en un sitio oscuro: es un botón. */
+.saldo{padding:20px var(--pad) 16px;border-bottom:1px solid var(--sep);text-align:center}
+.saldo .cifra{font-size:2.75rem;font-weight:600;color:var(--neon);line-height:1.05;letter-spacing:-.02em}
+.saldo .unidad{display:block;margin-top:4px;font-size:var(--t-sub);color:var(--mu)}
+.saldo .primary{margin-top:16px}
+
+/* ---------------- Hoja de envío ---------------- */
+
+.fondo{position:fixed;inset:0;background:rgba(0,0,0,.66);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+.hoja{width:100%;max-width:540px;background:var(--panel);border-radius:20px 20px 0 0;border-top:1px solid var(--sep);
+      padding:10px var(--pad) calc(20px + env(safe-area-inset-bottom));max-height:92dvh;overflow-y:auto}
+.agarre{width:38px;height:4px;border-radius:2px;background:var(--sep);margin:0 auto 14px}
+.hoja h2{margin:0 0 4px;font-size:var(--t-title);font-weight:600}
+.hoja .guia{margin:0 0 16px;color:var(--mu);font-size:var(--t-sub)}
+.hoja label{display:block;margin:16px 0 8px;font-size:var(--t-foot);letter-spacing:.11em;text-transform:uppercase;color:var(--mu)}
+.hoja input{width:100%;min-height:var(--tap);padding:12px 15px;border:1px solid var(--sep);border-radius:var(--r-ctl);background:var(--bg);color:var(--tx)}
+.hoja input:focus{outline:none;border-color:var(--neon)}
+
+/* Elegir es más fácil que escribir, sobre todo con el celular en una mano. */
+.montos{display:flex;gap:8px;flex-wrap:wrap}
+.montos button{flex:1;min-width:60px;min-height:var(--tap);border:1px solid var(--sep);border-radius:var(--r-ctl);background:none;color:var(--tx);font-size:var(--t-body);font-weight:500}
+.montos button[aria-pressed=true]{background:var(--neon);color:var(--on-neon);border-color:var(--neon);font-weight:600}
+
+.recientes{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.recientes::-webkit-scrollbar{display:none}
+.recientes button{flex:none;min-height:38px;padding:0 14px;border:1px solid var(--sep);border-radius:999px;background:none;color:var(--tx);font-size:var(--t-foot)}
+.recientes button[aria-pressed=true]{border-color:var(--neon);color:var(--neon)}
+
+.ghost{width:100%;min-height:var(--tap);margin-top:9px;border:1px solid var(--sep);border-radius:var(--r-card);background:none;color:var(--mu);font-size:var(--t-sub)}
+
+/* Confirmación. Enviar monedas no se deshace, así que se ve exactamente qué
+   va a pasar antes de que pase. */
+.resumen{margin:8px 0 0;padding:18px 16px;background:var(--fill);border-radius:var(--r-card);text-align:center;font-size:var(--t-body)}
+.resumen .cuanto{display:block;font-size:2rem;font-weight:600;color:var(--neon);line-height:1.2}
+.resumen .para{display:block;margin-top:6px}
+.resumen .para b{font-weight:600}
+.irreversible{margin:12px 0 16px;padding:11px 14px;border-radius:var(--r-ctl);background:rgba(255,122,77,.14);color:var(--err);font-size:var(--t-sub);text-align:center}
+
+/* La línea de comandos sigue ahí para el tesorero, pero replegada: ya no es
+   la única forma de hacer las cosas. */
+.avanzado{border:0;background:none;color:var(--mu);font-size:var(--t-foot);min-height:38px;padding:0;text-align:left}
+
 /* ---------------- Consola ---------------- */
 
 #app{flex:1;display:flex;flex-direction:column;min-height:100dvh}
@@ -207,13 +253,18 @@ footer{border-top:1px solid var(--sep);background:var(--panel);padding:10px var(
   <header>
     <div class="who">
       <div class="name" id="myName">—</div>
-      <div class="bal"><span id="myBalance">0</span><span class="unit">monedas</span></div>
     </div>
     <div class="acts">
       <button class="iconbtn" id="keyBtn">Clave</button>
       <button class="iconbtn" id="outBtn">Salir</button>
     </div>
   </header>
+
+  <section class="saldo">
+    <div class="cifra"><span id="myBalance">0</span></div>
+    <span class="unidad">monedas</span>
+    <button class="primary" id="btnEnviar">Enviar monedas</button>
+  </section>
 
   <div class="tg" id="tgAviso" hidden>
     <p>Conecta Telegram y te avisamos ahí cada vez que envíes o recibas monedas, con el número de movimiento en el libro.</p>
@@ -229,6 +280,43 @@ footer{border-top:1px solid var(--sep);background:var(--panel);padding:10px var(
       <button id="sendBtn">Enviar</button>
     </div>
   </footer>
+</div>
+
+<div class="fondo" id="hoja" hidden>
+  <div class="hoja" role="dialog" aria-modal="true" aria-labelledby="hojaTitulo">
+    <div class="agarre"></div>
+
+    <div id="paso1">
+      <h2 id="hojaTitulo">Enviar monedas</h2>
+      <p class="guia">Elige cuánto y a quién.</p>
+
+      <label for="hMonto">Cuánto</label>
+      <div class="montos" id="montos"></div>
+      <input id="hMonto" inputmode="numeric" placeholder="Otra cantidad" aria-label="Otra cantidad">
+
+      <label for="hPara">A quién</label>
+      <div class="recientes" id="recientes"></div>
+      <input id="hPara" inputmode="tel" placeholder="300 123 4567">
+
+      <div id="hojaMsg"></div>
+      <button class="primary" id="btnRevisar" style="margin-top:16px">Revisar envío</button>
+      <button class="ghost" id="btnCerrar">Cancelar</button>
+    </div>
+
+    <div id="paso2" hidden>
+      <h2>¿Confirmas?</h2>
+      <p class="guia">Revisa bien antes de enviar.</p>
+
+      <p class="resumen">
+        <span class="cuanto" id="cMonto">—</span>
+        <span class="para">para <b id="cPara">—</b></span>
+      </p>
+      <p class="irreversible">Las monedas se van de una y no se pueden devolver.</p>
+
+      <button class="primary" id="btnConfirmar">Sí, enviar</button>
+      <button class="ghost" id="btnVolver">Volver a revisar</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -382,6 +470,7 @@ function signOut(reason) {
   store('sb.token', null);
   detenerVigilante();
   ultimoVisto = 0;
+  recientes.clear();
   $('tgAviso').hidden = true;
   // El historial se borra siempre, no solo al tocar Salir: en un celular
   // prestado, la siguiente persona no tiene por qué ver los movimientos de
@@ -468,6 +557,7 @@ async function send(text, isRetry) {
    al ejecutar el comando, y anunciarlo otra vez sería repetirse. */
 var ultimoVisto = 0;
 var vigilante = null;
+var recientes = new Map();
 
 async function mirarNovedades(callado) {
   if (!token) return;
@@ -481,6 +571,13 @@ async function mirarNovedades(callado) {
 
     r.movimientos.forEach(function (m) {
       if (m.index > ultimoVisto) ultimoVisto = m.index;
+
+      // Con quién ya transó: ofrecerle esos nombres evita que tenga que
+      // volver a escribir un número de diez dígitos.
+      if (m.otroTelefono && m.otroTelefono !== 'TESORERO') {
+        recientes.set(m.otroTelefono, (m.otro || '').split(' @')[0] || m.otroTelefono);
+      }
+
       if (callado || !m.recibido) return;
 
       var unidad = m.amount === 1 ? ' moneda' : ' monedas';
@@ -554,6 +651,134 @@ libro.style.display = 'inline-flex';
 libro.style.alignItems = 'center';
 libro.style.textDecoration = 'none';
 $('chips').appendChild(libro);
+
+/* ---------- Hoja de envío ---------- */
+
+/* Enviar monedas exigía escribir "/transfer @3009876543 5" en un celular, de
+   noche y con una mano. Ahora se elige. La línea de comandos sigue abajo para
+   el tesorero, que sí necesita lo que no cabe en un formulario. */
+
+var montoElegido = null;
+var paraElegido = null;
+
+function hojaAviso(texto) {
+  $('hojaMsg').textContent = texto || '';
+  $('hojaMsg').className = texto ? 'bad' : '';
+  $('hojaMsg').style.cssText = texto
+    ? 'margin-top:14px;padding:11px 14px;border-radius:11px;background:rgba(255,122,77,.14);color:var(--err);font-size:var(--t-sub)'
+    : '';
+}
+
+[1, 5, 10, 20].forEach(function (n) {
+  var b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = n;
+  b.setAttribute('aria-pressed', 'false');
+  b.onclick = function () {
+    montoElegido = n;
+    $('hMonto').value = '';
+    Array.from($('montos').children).forEach(function (o) {
+      o.setAttribute('aria-pressed', String(o === b));
+    });
+    hojaAviso('');
+  };
+  $('montos').appendChild(b);
+});
+
+// Escribir una cantidad propia desmarca los atajos: si dos controles dicen
+// cosas distintas, no se sabe cuál manda.
+$('hMonto').addEventListener('input', function () {
+  this.value = this.value.replace(/\D/g, '');
+  if (this.value) {
+    montoElegido = null;
+    Array.from($('montos').children).forEach(function (o) { o.setAttribute('aria-pressed', 'false'); });
+  }
+  hojaAviso('');
+});
+
+$('hPara').addEventListener('input', function () {
+  paraElegido = null;
+  Array.from($('recientes').children).forEach(function (o) { o.setAttribute('aria-pressed', 'false'); });
+  hojaAviso('');
+});
+
+function pintarRecientes() {
+  $('recientes').textContent = '';
+  recientes.forEach(function (nombre, telefono) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = nombre;
+    b.setAttribute('aria-pressed', 'false');
+    b.onclick = function () {
+      paraElegido = telefono;
+      $('hPara').value = '';
+      Array.from($('recientes').children).forEach(function (o) {
+        o.setAttribute('aria-pressed', String(o === b));
+      });
+      hojaAviso('');
+    };
+    $('recientes').appendChild(b);
+  });
+  $('recientes').hidden = recientes.size === 0;
+}
+
+function abrirHoja() {
+  montoElegido = null;
+  paraElegido = null;
+  $('hMonto').value = '';
+  $('hPara').value = '';
+  Array.from($('montos').children).forEach(function (o) { o.setAttribute('aria-pressed', 'false'); });
+  hojaAviso('');
+  pintarRecientes();
+  $('paso1').hidden = false;
+  $('paso2').hidden = true;
+  $('hoja').hidden = false;
+}
+
+function cerrarHoja() { $('hoja').hidden = true; }
+
+function montoActual() {
+  return montoElegido || parseInt($('hMonto').value, 10) || 0;
+}
+
+function paraActual() {
+  return paraElegido || $('hPara').value.replace(/\D/g, '');
+}
+
+$('btnEnviar').onclick = abrirHoja;
+$('btnCerrar').onclick = cerrarHoja;
+$('btnVolver').onclick = function () { $('paso2').hidden = true; $('paso1').hidden = false; };
+
+// Tocar por fuera o Escape cierran, como se espera de una hoja.
+$('hoja').onclick = function (e) { if (e.target === this) cerrarHoja(); };
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && !$('hoja').hidden) cerrarHoja();
+});
+
+$('btnRevisar').onclick = function () {
+  var monto = montoActual();
+  var para = paraActual();
+  var saldo = parseInt($('myBalance').textContent, 10) || 0;
+
+  // Se avisa acá y no después del envío: corregir antes es gratis.
+  if (!monto) return hojaAviso('Elige cuántas monedas quieres enviar.');
+  if (para.length !== 10) return hojaAviso('El teléfono debe tener los 10 dígitos.');
+  if (monto > saldo) return hojaAviso('No te alcanza: tienes ' + saldo + ' monedas.');
+
+  var nombre = recientes.get(para);
+  $('cMonto').textContent = monto + (monto === 1 ? ' moneda' : ' monedas');
+  $('cPara').textContent = nombre ? nombre + ' (' + para + ')' : para;
+
+  $('paso1').hidden = true;
+  $('paso2').hidden = false;
+};
+
+$('btnConfirmar').onclick = function () {
+  var monto = montoActual();
+  var para = paraActual();
+  cerrarHoja();
+  send('/transfer @' + para + ' ' + monto);
+};
 
 /* ---------- Arranque ---------- */
 
