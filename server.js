@@ -7,7 +7,7 @@ const { createMongoStore } = require('./src/store/mongoStore');
 const { createMessenger } = require('./src/services/messaging');
 const { createCommands } = require('./src/services/commands');
 const { createSessions } = require('./src/services/sessions');
-const { createSms } = require('./src/services/sms');
+const { createSms, createWhatsapp } = require('./src/services/sms');
 const { createTelegram } = require('./src/services/telegram');
 
 // El secreto de sesión tiene que sobrevivir a los reinicios: si cambia, las
@@ -38,6 +38,7 @@ async function main() {
   const sessions = createSessions({ secret: sessionSecret });
 
   const sms = createSms(config.sms);
+  const whatsapp = createWhatsapp(config.sms);
   const telegram = createTelegram({
     ...config.telegram,
     // Derivado del secreto de sesión, que ya es estable entre reinicios: así
@@ -47,7 +48,7 @@ async function main() {
   });
 
   const sendMessage = createMessenger();
-  const commands = createCommands(store, config, { sms, telegram });
+  const commands = createCommands(store, config, { sms, whatsapp, telegram });
 
   if (telegram.enabled) {
     const hook = await telegram.registerWebhook();
@@ -60,12 +61,14 @@ async function main() {
     console.warn('⚠️ Telegram desactivado: falta TELEGRAM_BOT_TOKEN.');
   }
 
-  if (!telegram.enabled && !sms.enabled) {
+  if (whatsapp.enabled) console.log('💬 WhatsApp disponible por Twilio.');
+
+  if (!telegram.enabled && !sms.enabled && !whatsapp.enabled) {
     console.warn('⚠️ Nadie recibe avisos: no hay ni Telegram ni SMS configurados.');
     console.warn('   Las transferencias funcionan igual y se ven en la consola y en /libro.');
   }
 
-  const app = createApp({ config, store, sessions, commands, sendMessage, sms, telegram });
+  const app = createApp({ config, store, sessions, commands, sendMessage, sms, whatsapp, telegram });
 
   app.listen(config.port, () => {
     console.log(`🚀 ${config.botName} corriendo en el puerto ${config.port}`);

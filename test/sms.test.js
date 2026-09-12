@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createSms } = require('../src/services/sms');
+const { createSms, createWhatsapp } = require('../src/services/sms');
 const { createCommands } = require('../src/services/commands');
 const { createFakeStore } = require('../test-support/fakeStore');
 
@@ -111,4 +111,76 @@ test('nothing is sent when SMS is switched off', async () => {
   await commands.transfer('3000000001', ['@3000000002', '4']);
 
   assert.equal(sms.sent.length, 0);
+});
+
+/* ---------- WhatsApp y la cascada de canales ---------- */
+
+test('WhatsApp addresses are tagged with the channel Twilio expects', () => {
+  const wa = createWhatsapp({
+    accountSid: 'AC_test',
+    authToken: 'token',
+    whatsappFrom: '+14155238886',
+    countryCode: '+57',
+  });
+
+  assert.equal(wa.enabled, true);
+  assert.equal(wa.canal, 'whatsapp');
+  assert.equal(wa.toE164('3153811758'), '+573153811758');
+});
+
+test('WhatsApp stays off when only the SMS number is configured', () => {
+  const wa = createWhatsapp({ accountSid: 'AC_test', authToken: 'token', from: '+15550001111' });
+  assert.equal(wa.enabled, false);
+});
+
+// Canal falso que puede fallar a voluntad, para probar la cascada.
+function canal(nombre, { enabled = true, falla = false } = {}) {
+  const sent = [];
+  return {
+    nombre,
+    enabled,
+    sent,
+    async send(destino, text) {
+      if (falla) return { ok: false, reason: 'rejected' };
+      sent.push({ destino, text });
+      return { ok: true };
+    },
+  };
+}
+
+async function setupCanales(canales) {
+  const store = createFakeStore({ treasurerPhone: '3000000009' });
+  const commands = createCommands(store, { defaultEventId: 'e', botName: 'Piso 26' }, canales);
+  const alta = (p, n) => store.createAccount({ phoneNumber: p, pin: '1234', email: 'a@b.co', name: n });
+
+  await alta('3000000001', 'Ana');
+  await alta('3000000002', 'Beto');
+  store._debug.users.get('3000000001').balance = 20;
+  return { store, commands };
+}
+
+test('WhatsApp is used before the paid SMS', async () => {
+  const whatsapp = canal('whatsapp');
+  const sms = canal('sms');
+  const { commands } = await setupCanales({ whatsapp, sms });
+
+  await commands.transfer('3000000001', ['@3000000002', '4']);
+
+  assert.equal(whatsapp.sent.length, 2);
+  assert.equal(sms.sent.length, 0, 'no se debió gastar ningún SMS');
+});
+
+test('a channel that fails hands over to the next instead of losing the notice', async () => {
+  const telegram = canal('telegram', { falla: true });
+  const whatsapp = canal('whatsapp', { falla: true });
+  const sms = canal('sms');
+
+  const { store, commands } = await setupCanales({ telegram, whatsapp, sms });
+  store._debug.users.get('3000000002').telegramChatId = '555';
+
+  await commands.transfer('3000000001', ['@3000000002', '4']);
+  // La cascada corre sin bloquear la transferencia; se le da un instante.
+  await new Promise((r) => setTimeout(r, 40));
+
+  assert.equal(sms.sent.length, 2, 'el SMS debió recoger lo que los otros no pudieron');
 });

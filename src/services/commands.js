@@ -5,7 +5,7 @@ const { parseAmount, parseSendArgs } = require('../utils/parse');
 // los modelos de Mongoose directamente) para poder probarlos con un store
 // en memoria en test/commands.test.js.
 function createCommands(store, config, canales = {}) {
-  const { sms, telegram } = canales;
+  const { sms, whatsapp, telegram } = canales;
   const commands = {};
 
   // Lo que se ve de alguien en el libro público: su nombre y los últimos 4
@@ -15,27 +15,37 @@ function createCommands(store, config, canales = {}) {
     return `${user.name} @${String(user.phoneNumber).slice(-4)}`;
   }
 
-  // Telegram primero: es gratis y llega con el nombre del bot del evento. El
-  // SMS queda de respaldo para quien no vinculó el bot, y solo sale si hay
-  // credenciales configuradas.
+  // Cascada de canales. Telegram y WhatsApp van antes que el SMS porque no
+  // cobran por mensaje; el SMS lo cobran los operadores y queda de último
+  // recurso para quien no tiene ninguno de los dos.
   //
-  // Se manda sin esperar respuesta: el aviso no es parte de la transacción, y
-  // un proveedor lento no puede dejar a alguien mirando una pantalla
-  // congelada por un movimiento que ya quedó hecho.
+  // Si un canal falla se intenta el siguiente de verdad, en vez de dar el
+  // aviso por perdido: alguien puede tener Telegram vinculado y el bot
+  // bloqueado, o WhatsApp sin haber entrado al sandbox.
+  //
+  // Todo esto va sin esperar respuesta: el aviso no es parte de la
+  // transacción, y un proveedor lento no puede dejar a nadie mirando una
+  // pantalla congelada por un movimiento que ya quedó hecho.
   function avisar(user, text) {
     if (!user) return;
 
-    const fallo = (canal) => (error) =>
-      console.error(`No se pudo avisar por ${canal}: ${error.message}`);
+    const cascada = async () => {
+      if (telegram && telegram.enabled && user.telegramChatId) {
+        if ((await telegram.send(user.telegramChatId, text)).ok) return 'telegram';
+      }
 
-    if (telegram && telegram.enabled && user.telegramChatId) {
-      telegram.send(user.telegramChatId, text).catch(fallo('Telegram'));
-      return;
-    }
+      if (whatsapp && whatsapp.enabled) {
+        if ((await whatsapp.send(user.phoneNumber, text)).ok) return 'whatsapp';
+      }
 
-    if (sms && sms.enabled) {
-      sms.send(user.phoneNumber, text).catch(fallo('SMS'));
-    }
+      if (sms && sms.enabled) {
+        if ((await sms.send(user.phoneNumber, text)).ok) return 'sms';
+      }
+
+      return null;
+    };
+
+    cascada().catch((error) => console.error(`No se pudo avisar: ${error.message}`));
   }
 
   // La cuenta se crea desde la pantalla de registro (POST /api/signup), que es

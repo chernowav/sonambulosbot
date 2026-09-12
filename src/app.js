@@ -11,7 +11,7 @@ const { createTelegramRouter, createTelegramApiRouter } = require('./routes/tele
 // construirlo, para que test/ pueda levantar la misma app con un store en
 // memoria y hablarle por HTTP sin Mongo de por medio. server.js es el que
 // arma las dependencias reales.
-function createApp({ config, store, sessions, commands, sendMessage, sms, telegram }) {
+function createApp({ config, store, sessions, commands, sendMessage, sms, whatsapp, telegram }) {
   const handleIncoming = createWebhookHandler({ commands, config, sendMessage, sessions });
 
   // Momento de arranque de esta instancia. Sirve para saber si el servidor se
@@ -57,11 +57,12 @@ function createApp({ config, store, sessions, commands, sendMessage, sms, telegr
     res.json({
       status: `✅ ${config.botName} Bot running`,
       email: 'sonambulosctg@gmail.com',
-      version: '1.3.0-beta',
+      version: '1.4.0-beta',
       startedAt,
       // Para poder comprobar desde afuera si las credenciales quedaron bien
       // puestas, sin tener que mandar un mensaje de verdad para averiguarlo.
       telegram: telegram && telegram.enabled ? 'configurado' : 'sin configurar',
+      whatsapp: whatsapp && whatsapp.enabled ? 'configurado' : 'sin configurar',
       sms: sms && sms.enabled ? 'configurado' : 'sin configurar',
       claveTesorero: config.adminPasswordConfigurada
         ? 'configurada'

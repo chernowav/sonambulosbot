@@ -46,6 +46,9 @@ const config = {
     accountSid: process.env.TWILIO_ACCOUNT_SID || '',
     authToken: process.env.TWILIO_AUTH_TOKEN || '',
     from: process.env.TWILIO_FROM || '',
+    // El proyecto ya traía este número de la integración de WhatsApp anterior
+    // al pivote; se reusa en vez de pedir credenciales nuevas.
+    whatsappFrom: process.env.TWILIO_WHATSAPP_NUMBER || '',
     countryCode: process.env.SMS_COUNTRY_CODE || '+57',
   },
 };
