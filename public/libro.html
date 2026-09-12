@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Piso 26 · Libro</title>
+<meta name="theme-color" content="#0B0A0F">
+<style>
+:root{
+  --bg:#0B0A0F;
+  --panel:#17151F;
+  --fill:#1C1926;
+  --sep:rgba(255,255,255,.11);
+  --tx:#F6F2F8;
+  --mu:#A79FB8;
+  --neon:#FF2D95;
+  --on-neon:#12030B;
+  --err:#FF7A4D;
+  --ok:#4FE0A8;
+
+  --t-hero:1.75rem;
+  --t-body:1.0625rem;
+  --t-sub:.9375rem;
+  --t-foot:.8125rem;
+
+  --r-card:14px;
+  --tap:44px;
+  --pad:18px;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+
+body{
+  margin:0 auto;max-width:620px;min-height:100dvh;
+  background:var(--bg);color:var(--tx);
+  font:var(--t-body)/1.47 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  padding:0 var(--pad) calc(32px + env(safe-area-inset-bottom));
+  border-left:1px solid var(--sep);border-right:1px solid var(--sep);
+}
+button{cursor:pointer;font:inherit}
+:focus-visible{outline:2px solid var(--neon);outline-offset:2px}
+a{color:var(--neon)}
+
+header{padding:28px 0 18px}
+h1{margin:0;font:400 var(--t-hero)/1.1 Georgia,"Times New Roman",serif}
+h1 i{color:var(--neon);font-style:normal}
+header p{margin:8px 0 0;color:var(--mu);font-size:var(--t-sub)}
+
+.check{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0 22px}
+.verify{min-height:var(--tap);padding:0 18px;border:0;border-radius:var(--r-card);background:var(--neon);color:var(--on-neon);font-weight:600;font-size:var(--t-sub)}
+.verify:disabled{opacity:.45;cursor:default}
+
+#estado{flex:1;min-width:200px;border-radius:var(--r-card);padding:12px 14px;font-size:var(--t-sub)}
+#estado:empty{display:none}
+#estado.ok{background:rgba(79,224,168,.14);color:var(--ok)}
+#estado.bad{background:rgba(255,122,77,.14);color:var(--err)}
+#estado.wait{background:var(--fill);color:var(--mu)}
+
+/* Cada movimiento, como un eslabón. La línea de la izquierda los encadena
+   visualmente, que es exactamente lo que hacen los hashes. */
+.mov{position:relative;background:var(--panel);border-radius:var(--r-card);padding:14px 16px;margin-bottom:10px}
+.mov::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:3px;background:var(--neon);opacity:.55}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.num{color:var(--mu);font:var(--t-foot)/1 ui-monospace,SFMono-Regular,Menlo,monospace}
+.monto{color:var(--neon);font-weight:600;white-space:nowrap}
+.quien{margin:7px 0 0}
+.quien b{font-weight:600}
+.flecha{color:var(--mu);margin:0 .35em}
+.cuando{margin:4px 0 0;color:var(--mu);font-size:var(--t-foot)}
+.hash{margin:9px 0 0;color:var(--mu);font:var(--t-foot)/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.mov.roto{outline:2px solid var(--err)}
+
+.mas{width:100%;min-height:var(--tap);border:1px solid var(--sep);border-radius:var(--r-card);background:none;color:var(--mu);font-size:var(--t-sub);margin-top:6px}
+.vacio{color:var(--mu);text-align:center;padding:40px 0}
+.pie{margin:26px 0 0;color:var(--mu);font-size:var(--t-foot);border-top:1px solid var(--sep);padding-top:16px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Piso <i>26</i></h1>
+  <p>Libro de movimientos. Público, y verificable por cualquiera.</p>
+</header>
+
+<div class="check">
+  <button class="verify" id="btnVerificar">Verificar la cadena</button>
+  <div id="estado" role="status"></div>
+</div>
+
+<div id="lista"></div>
+<button class="mas" id="btnMas" hidden>Ver más movimientos</button>
+
+<p class="pie">
+  Cada movimiento guarda el hash del anterior. Si alguien edita uno viejo, todos
+  los siguientes dejan de cuadrar. El botón de arriba recalcula la cadena entera
+  <b>en tu navegador</b>, con los datos públicos: no tienes que creerle al
+  servidor. Los teléfonos no se publican, solo los últimos cuatro dígitos.
+</p>
+
+<script>
+var $ = function (id) { return document.getElementById(id); };
+var movimientos = [];
+var masViejo = null;
+var quedanMas = true;
+
+function texto(id, msg, clase) {
+  $(id).textContent = msg || '';
+  $(id).className = msg ? clase : '';
+}
+
+async function traer(before) {
+  var url = '/api/libro?limit=50' + (before ? '&before=' + before : '');
+  var res = await fetch(url);
+  if (!res.ok) throw new Error('No se pudo leer el libro.');
+  var data = await res.json();
+  return data.entries || [];
+}
+
+function fecha(iso) {
+  var d = new Date(iso);
+  return d.toLocaleString('es-CO', {
+    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function pintar(entradas) {
+  entradas.forEach(function (e) {
+    var nodo = document.createElement('article');
+    nodo.className = 'mov';
+    nodo.id = 'mov-' + e.index;
+
+    var top = document.createElement('div');
+    top.className = 'top';
+
+    var num = document.createElement('span');
+    num.className = 'num';
+    num.textContent = '#' + e.index + ' · ' + (e.action === 'emission' ? 'emisión' : 'transferencia');
+
+    var monto = document.createElement('span');
+    monto.className = 'monto';
+    monto.textContent = e.amount + (e.amount === 1 ? ' moneda' : ' monedas');
+
+    top.appendChild(num);
+    top.appendChild(monto);
+
+    var quien = document.createElement('p');
+    quien.className = 'quien';
+    var de = document.createElement('b');
+    de.textContent = e.fromLabel === 'TESORERO' ? 'Tesorería' : e.fromLabel;
+    var fl = document.createElement('span');
+    fl.className = 'flecha';
+    fl.textContent = '→';
+    var a = document.createElement('b');
+    a.textContent = e.toLabel;
+    quien.appendChild(de);
+    quien.appendChild(fl);
+    quien.appendChild(a);
+
+    var cuando = document.createElement('p');
+    cuando.className = 'cuando';
+    cuando.textContent = fecha(e.timestamp);
+
+    var hash = document.createElement('p');
+    hash.className = 'hash';
+    hash.textContent = e.hash;
+
+    nodo.appendChild(top);
+    nodo.appendChild(quien);
+    nodo.appendChild(cuando);
+    nodo.appendChild(hash);
+    $('lista').appendChild(nodo);
+  });
+}
+
+async function cargarMas() {
+  $('btnMas').disabled = true;
+  try {
+    var entradas = await traer(masViejo);
+    if (!entradas.length) {
+      quedanMas = false;
+    } else {
+      movimientos = movimientos.concat(entradas);
+      masViejo = entradas[entradas.length - 1].index;
+      quedanMas = masViejo > 1;
+      pintar(entradas);
+    }
+  } catch (error) {
+    texto('estado', error.message, 'bad');
+  }
+  $('btnMas').hidden = !quedanMas;
+  $('btnMas').disabled = false;
+}
+
+/* ---------- Verificación en el navegador ---------- */
+
+/* Tiene que producir exactamente la misma cadena de texto que el servidor
+   (src/services/ledger.js). Si los dos lados no coinciden carácter por
+   carácter, la verificación no significa nada. */
+function payload(e) {
+  return [
+    e.index,
+    new Date(e.timestamp).toISOString(),
+    e.action,
+    e.fromLabel,
+    e.toLabel,
+    e.amount,
+    e.prevHash
+  ].join('|');
+}
+
+async function sha256(texto) {
+  var datos = new TextEncoder().encode(texto);
+  var buffer = await crypto.subtle.digest('SHA-256', datos);
+  return Array.from(new Uint8Array(buffer))
+    .map(function (b) { return b.toString(16).padStart(2, '0'); })
+    .join('');
+}
+
+async function traerTodo() {
+  var todos = [];
+  var cursor = null;
+  // Se pide hacia atrás hasta llegar al primer movimiento.
+  for (var vuelta = 0; vuelta < 200; vuelta += 1) {
+    var pagina = await traer(cursor);
+    if (!pagina.length) break;
+    todos = todos.concat(pagina);
+    cursor = pagina[pagina.length - 1].index;
+    if (cursor <= 1) break;
+  }
+  return todos.sort(function (a, b) { return a.index - b.index; });
+}
+
+$('btnVerificar').onclick = async function () {
+  this.disabled = true;
+  texto('estado', 'Recalculando la cadena…', 'wait');
+
+  try {
+    var cadena = await traerTodo();
+
+    if (!cadena.length) {
+      texto('estado', 'El libro está vacío. Todavía no hay movimientos.', 'wait');
+      this.disabled = false;
+      return;
+    }
+
+    var esperadoPrev = 'GENESIS';
+    var esperadoIndex = 1;
+
+    for (var i = 0; i < cadena.length; i += 1) {
+      var e = cadena[i];
+      var problema = null;
+
+      if (e.index !== esperadoIndex) problema = 'falta un movimiento antes de este';
+      else if (e.prevHash !== esperadoPrev) problema = 'no engancha con el anterior';
+      else if ((await sha256(payload(e))) !== e.hash) problema = 'el contenido no coincide con su hash';
+
+      if (problema) {
+        var roto = $('mov-' + e.index);
+        if (roto) { roto.classList.add('roto'); roto.scrollIntoView({ block: 'center' }); }
+        texto('estado', '⚠ La cadena se rompe en el movimiento #' + e.index + ': ' + problema + '.', 'bad');
+        this.disabled = false;
+        return;
+      }
+
+      esperadoPrev = e.hash;
+      esperadoIndex += 1;
+    }
+
+    texto(
+      'estado',
+      '✓ ' + cadena.length + (cadena.length === 1 ? ' movimiento verificado' : ' movimientos verificados') +
+        '. Nada fue alterado.',
+      'ok'
+    );
+  } catch (error) {
+    texto('estado', 'No se pudo verificar: ' + error.message, 'bad');
+  }
+
+  this.disabled = false;
+};
+
+$('btnMas').onclick = cargarMas;
+
+(async function () {
+  await cargarMas();
+  if (!movimientos.length) {
+    var vacio = document.createElement('p');
+    vacio.className = 'vacio';
+    vacio.textContent = 'Todavía no hay movimientos.';
+    $('lista').appendChild(vacio);
+  }
+})();
+</script>
+</body>
+</html>

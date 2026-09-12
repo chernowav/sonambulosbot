@@ -47,12 +47,24 @@ const eventSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+// Cada transacción es un eslabón del libro público: lleva su número de orden,
+// el hash del movimiento anterior y el suyo propio. Editar una transacción
+// vieja rompe el hash de todas las que vinieron después, así que la
+// manipulación se nota sin necesidad de confiar en nadie.
 const transactionSchema = new mongoose.Schema({
+  index: { type: Number, unique: true, sparse: true },
+  prevHash: String,
+  hash: String,
+  // from/to guardan el teléfono, porque /history busca por él. Las etiquetas
+  // son lo que se publica y lo que cubre el hash.
   from: String,
   to: String,
+  fromLabel: String,
+  toLabel: String,
   coinIds: [String],
   action: String,
   description: String,
+  amount: Number,
   timestamp: { type: Date, default: Date.now },
   eventId: String,
   visible: { type: Boolean, default: true },
@@ -68,8 +80,28 @@ const universeContentSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+// Ajustes que el propio servidor genera y necesita conservar entre reinicios.
+// Hoy solo guarda el secreto de las sesiones: antes se generaba en memoria en
+// cada arranque, así que cada redespliegue cerraba la sesión de todo el mundo.
+const settingSchema = new mongoose.Schema({
+  key: { type: String, unique: true, required: true },
+  value: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+// Punta de la cadena del libro público: el número y el hash del último
+// movimiento registrado. Se actualiza con compare-and-set para que dos
+// transferencias simultáneas no se cuelguen del mismo eslabón.
+const ledgerHeadSchema = new mongoose.Schema({
+  _id: { type: String, default: 'libro' },
+  index: { type: Number, default: 0 },
+  hash: { type: String, default: 'GENESIS' },
+});
+
 module.exports = {
   User: mongoose.model('User', userSchema),
+  Setting: mongoose.model('Setting', settingSchema),
+  LedgerHead: mongoose.model('LedgerHead', ledgerHeadSchema),
   Coin: mongoose.model('Coin', coinSchema),
   Event: mongoose.model('Event', eventSchema),
   Transaction: mongoose.model('Transaction', transactionSchema),

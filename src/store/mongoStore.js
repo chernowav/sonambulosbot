@@ -1,6 +1,10 @@
 const crypto = require('crypto');
-const { User, Coin, Transaction, UniverseContent } = require('../models');
+const { User, Coin, Transaction, UniverseContent, Setting, LedgerHead } = require('../models');
 const { generatePin, hashPin } = require('../utils/pin');
+const { GENESIS, hashEntry } = require('../services/ledger');
+
+// Si dos transferencias intentan colgarse del mismo eslabón, una reintenta.
+const LEDGER_RETRIES = 6;
 
 function isDuplicateKey(error) {
   return Boolean(error) && error.code === 11000;
@@ -161,8 +165,71 @@ function createMongoStore({ treasurerPhone }) {
     return user.pinHash === hashPin(phoneNumber, pin);
   }
 
+  // Agrega un movimiento al final de la cadena del libro público.
+  //
+  // Leer la punta y escribir el eslabón nuevo no es una sola operación, así
+  // que entre las dos otra transferencia podría colarse. El compare-and-set
+  // (avanzar la punta solo si sigue teniendo el hash que leímos) hace que la
+  // perdedora reintente en vez de colgarse del mismo eslabón y partir la
+  // cadena en dos.
   async function recordTransaction(data) {
-    return Transaction.create({ ...data, visible: true });
+    for (let attempt = 0; attempt < LEDGER_RETRIES; attempt += 1) {
+      const head = await LedgerHead.findOneAndUpdate(
+        { _id: 'libro' },
+        { $setOnInsert: { index: 0, hash: GENESIS } },
+        { new: true, upsert: true }
+      );
+
+      const entry = {
+        ...data,
+        index: head.index + 1,
+        prevHash: head.hash,
+        timestamp: data.timestamp || new Date(),
+      };
+      entry.hash = hashEntry(entry);
+
+      const moved = await LedgerHead.findOneAndUpdate(
+        { _id: 'libro', hash: head.hash },
+        { $set: { index: entry.index, hash: entry.hash } }
+      );
+
+      if (moved) return Transaction.create({ ...entry, visible: true });
+    }
+
+    throw new Error('No se pudo escribir en el libro: demasiados movimientos a la vez.');
+  }
+
+  // El libro completo, del más nuevo al más viejo, para mostrarlo por páginas.
+  async function listLedger({ limit = 50, before } = {}) {
+    const query = { index: { $exists: true } };
+    if (before) query.index = { $exists: true, $lt: Number(before) };
+
+    return Transaction.find(query).sort({ index: -1 }).limit(Math.min(limit, 200));
+  }
+
+  // En orden, desde el primero: así es como se verifica la cadena.
+  async function listLedgerInOrder(limit = 2000) {
+    return Transaction.find({ index: { $exists: true } }).sort({ index: 1 }).limit(limit);
+  }
+
+  // Valores que el servidor genera una vez y necesita conservar entre
+  // reinicios. El upsert con captura de clave duplicada resuelve el caso de
+  // dos instancias arrancando a la vez: gana la que escribió primero y la otra
+  // relee su valor, en vez de quedar cada una con un secreto distinto.
+  async function getOrCreateSetting(key, makeValue) {
+    const existing = await Setting.findOne({ key });
+    if (existing) return existing.value;
+
+    const value = makeValue();
+    try {
+      await Setting.create({ key, value });
+      return value;
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+      const winner = await Setting.findOne({ key });
+      if (!winner) throw error;
+      return winner.value;
+    }
   }
 
   async function listTransactionsFor(phoneNumber, limit = 10) {
@@ -196,6 +263,9 @@ function createMongoStore({ treasurerPhone }) {
     listUsers,
     recordTransaction,
     listTransactionsFor,
+    listLedger,
+    listLedgerInOrder,
+    getOrCreateSetting,
     recordContent,
     listContentForArtist,
     createAccount,

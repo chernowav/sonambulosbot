@@ -4,8 +4,25 @@ const { parseAmount, parseSendArgs } = require('../utils/parse');
 // Comandos del bot. Reciben el store como dependencia (en vez de importar
 // los modelos de Mongoose directamente) para poder probarlos con un store
 // en memoria en test/commands.test.js.
-function createCommands(store, config) {
+function createCommands(store, config, sms) {
   const commands = {};
+
+  // El SMS avisa; no forma parte de la transacción. Si el proveedor está
+  // lento o caído, quien transfirió no se queda esperando diez segundos
+  // frente a una pantalla congelada: el movimiento ya quedó registrado.
+  // Lo que se ve de alguien en el libro público: su nombre y los últimos 4
+  // dígitos, suficiente para distinguir a dos personas que se llamen igual sin
+  // publicar el teléfono de nadie.
+  function etiqueta(user) {
+    return `${user.name} @${String(user.phoneNumber).slice(-4)}`;
+  }
+
+  function avisar(phoneNumber, text) {
+    if (!sms || !sms.enabled) return;
+    sms.send(phoneNumber, text).catch((error) => {
+      console.error(`No se pudo avisar a ${phoneNumber}: ${error.message}`);
+    });
+  }
 
   // La cuenta se crea desde la pantalla de registro (POST /api/signup), que es
   // donde la persona elige su PIN. Acá /register solo cambia el nombre con el
@@ -57,15 +74,24 @@ function createCommands(store, config) {
       return `❌ Saldo insuficiente. Tienes: ${result.fromUser ? result.fromUser.balance : 0}`;
     }
 
-    await store.recordTransaction({
+    const entry = await store.recordTransaction({
       from: phoneNumber,
       to: toPhone,
+      fromLabel: etiqueta(result.fromUser),
+      toLabel: etiqueta(result.toUser),
+      amount,
       coinIds: [],
       action: 'transfer',
       description: `Transferencia de ${amount} monedas de ${result.fromUser.name} a ${result.toUser.name}`,
     });
 
-    return `✅ Transferencia completada!\n📤 Enviaste: ${amount} monedas\n💰 Tu nuevo saldo: ${result.fromUser.balance}`;
+    avisar(
+      toPhone,
+      `${config.botName}: recibiste ${amount} monedas de ${result.fromUser.name}. ` +
+        `Tu saldo: ${result.toUser.balance}. Movimiento #${entry.index} en el libro público.`
+    );
+
+    return `✅ Transferencia completada!\n📤 Enviaste: ${amount} monedas\n💰 Tu nuevo saldo: ${result.fromUser.balance}\n🔗 Movimiento #${entry.index} en el libro`;
   };
 
   commands.send = async (phoneNumber, args) => {
@@ -89,16 +115,25 @@ function createCommands(store, config) {
 
     const { toUser, coinIds } = await store.emitCoins(toPhone, amount, eventId);
 
-    await store.recordTransaction({
+    const entry = await store.recordTransaction({
       from: 'TESORERO',
       to: toPhone,
+      fromLabel: 'TESORERO',
+      toLabel: etiqueta(toUser),
+      amount,
       coinIds,
       action: 'emission',
-      description: `✅ Tesorero emitió ${amount} monedas a ${toUser.name}`,
+      description: `Tesorero emitió ${amount} monedas a ${toUser.name}`,
       eventId,
     });
 
-    return `✅ Emitidas ${amount} monedas a ${toUser.name}\n📊 Nuevo saldo: ${toUser.balance}`;
+    avisar(
+      toPhone,
+      `${config.botName}: te emitieron ${amount} monedas. Tu saldo: ${toUser.balance}. ` +
+        `Movimiento #${entry.index} en el libro público.`
+    );
+
+    return `✅ Emitidas ${amount} monedas a ${toUser.name}\n📊 Nuevo saldo: ${toUser.balance}\n🔗 Movimiento #${entry.index} en el libro`;
   };
 
   // /content [link] @artista1 @artista2 ... — el productor pega el link ya

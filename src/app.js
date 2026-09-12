@@ -4,6 +4,7 @@ const path = require('path');
 const { createWebhookHandler } = require('./routes/webhook');
 const { createAdminRouter } = require('./routes/admin');
 const { createAuthRouter } = require('./routes/auth');
+const { createLedgerRouter } = require('./routes/ledger');
 
 // Recibe todo lo que necesita como parámetro (store, sessions, ...) en vez de
 // construirlo, para que test/ pueda levantar la misma app con un store en
@@ -26,7 +27,13 @@ function createApp({ config, store, sessions, commands, sendMessage }) {
     res.sendFile(path.join(__dirname, '..', 'public', 'chat.html'))
   );
 
+  // Libro público: se entra sin cuenta ni sesión, esa es la idea.
+  app.get('/libro', (req, res) =>
+    res.sendFile(path.join(__dirname, '..', 'public', 'libro.html'))
+  );
+
   app.use('/api', createAuthRouter({ store, sessions }));
+  app.use('/api', createLedgerRouter({ store }));
 
   // Soporta formato Twilio (Body/From) o JSON simple (message/phone) por
   // igual; ambas rutas comparten la misma lógica en src/routes/webhook.js.
@@ -39,9 +46,12 @@ function createApp({ config, store, sessions, commands, sendMessage }) {
     res.json({
       status: `✅ ${config.botName} Bot running`,
       email: 'sonambulosctg@gmail.com',
-      version: '1.1.0-beta',
+      version: '1.2.0-beta',
       endpoints: {
         'GET /chat': 'Consola web (crear cuenta / iniciar sesión)',
+        'GET /libro': 'Libro público de movimientos, sin cuenta',
+        'GET /api/libro': 'Movimientos en JSON { limit, before }',
+        'GET /api/libro/verificar': 'Revisa la cadena de hashes entera',
         'POST /api/signup': 'Crear cuenta { name, phone, email, pin }',
         'POST /api/login': 'Iniciar sesión { phone, pin } → token',
         'GET /api/me?token=': 'Datos de la sesión actual',

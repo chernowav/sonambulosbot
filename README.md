@@ -1,8 +1,38 @@
-# 🎭 SONÁMBULOS — Consola web para Eventos
+# PISO 26 — Moneda del evento
 
-Sistema de monedas digitales para eventos Sonámbulos, construido con Node.js y MongoDB. La interfaz es una consola de chat servida por el mismo backend en `/chat` — ya no depende de WhatsApp/Twilio.
+Sistema de monedas digitales para el evento Piso 26, construido con Node.js y MongoDB. La interfaz es una consola servida por el mismo backend en `/chat`, y todos los movimientos quedan en un libro público en `/libro`.
 
-**Evento MVP:** 3 Octubre 2026
+**Evento:** sábado 3 de octubre de 2026
+
+## El libro público
+
+Cada movimiento de monedas se encadena con el anterior mediante un hash
+(`src/services/ledger.js`): el hash de cada entrada cubre su contenido **y** el
+hash de la anterior. Editar una transacción vieja rompe los hashes de todas las
+siguientes, así que la manipulación se nota sin tener que confiar en el
+servidor.
+
+No es una cadena de bloques distribuida y no pretende serlo: no hay minería ni
+consenso entre nodos, porque aquí hay un solo operador. Lo que sí da es lo que
+importa para el evento — **un registro público, íntegro y auditable**.
+
+- `/libro` lo muestra y trae un botón que **recalcula la cadena entera en el
+  navegador de quien mira**, con los datos públicos. Verificar no requiere
+  creerle a este servidor.
+- El hash cubre las etiquetas públicas (`Cherno @1758`), no los teléfonos
+  completos. Si los cubriera, verificar desde afuera exigiría publicarlos.
+- `GET /api/libro/verificar` hace la misma comprobación del lado del servidor,
+  como conveniencia.
+
+## Avisos por SMS
+
+Quien recibe monedas recibe un mensaje de texto con el monto, su nuevo saldo y
+el número de movimiento en el libro. Se envía por la API REST de Twilio
+(`src/services/sms.js`), sin el SDK.
+
+El aviso va aparte de la transacción: si el proveedor está caído, el movimiento
+igual queda registrado y quien transfirió no espera a que Twilio responda. Sin
+credenciales configuradas, la app funciona normal y no manda nada.
 
 ## Stack
 
@@ -64,11 +94,15 @@ NODE_ENV=production
 ADMIN_PASSWORD             Clave de tesorero para /emit, /users, /content y /admin/setup.
                            Si no se define, se genera una temporal en cada arranque
                            (se imprime en el log) — defínela para producción.
-SESSION_SECRET             Firma los tokens de sesión. Si no se define, se genera
-                           uno nuevo por arranque y cada redeploy cierra la sesión
-                           de todos — defínelo para producción.
+SESSION_SECRET             Opcional. Firma los tokens de sesión. Si no se define,
+                           el servidor genera uno la primera vez y lo guarda en la
+                           base, así que sobrevive a los reinicios igual.
+TWILIO_ACCOUNT_SID         Opcional. Sin las tres de Twilio no se mandan avisos,
+TWILIO_AUTH_TOKEN          pero todo lo demás funciona igual.
+TWILIO_FROM
+SMS_COUNTRY_CODE=+57
 TREASURER_PHONE            Número (solo dígitos) promovido a admin automáticamente.
-BOT_NAME=Sonámbulos
+BOT_NAME=Piso 26
 EVENT_ID=event_oct3_2026
 ```
 
@@ -76,6 +110,9 @@ EVENT_ID=event_oct3_2026
 
 - `GET /` — health check
 - `GET /chat` — crear cuenta, iniciar sesión y consola
+- `GET /libro` — libro público de movimientos, sin cuenta
+- `GET /api/libro` — movimientos en JSON (`limit`, `before`)
+- `GET /api/libro/verificar` — revisa la cadena entera
 - `POST /api/signup` — crea la cuenta (`name`, `phone`, `email`, `pin`) → `{ token, user }`
 - `POST /api/login` — verifica el PIN (`phone`, `pin`) → `{ token, user }`
 - `GET /api/me?token=` — datos de la sesión actual

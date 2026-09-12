@@ -1,4 +1,5 @@
 const { generatePin } = require('../src/utils/pin');
+const { GENESIS, hashEntry } = require('../src/services/ledger');
 
 // Implementación en memoria de la misma interfaz que src/store/mongoStore.js,
 // para poder probar src/services/commands.js sin una base de datos real.
@@ -6,6 +7,8 @@ function createFakeStore({ treasurerPhone } = {}) {
   const users = new Map();
   const transactions = [];
   const content = [];
+  const settings = new Map();
+  let head = { index: 0, hash: GENESIS };
 
   function makeUser(phoneNumber, name) {
     return {
@@ -67,9 +70,36 @@ function createFakeStore({ treasurerPhone } = {}) {
       return Array.from(users.values());
     },
 
+    // Encadena igual que mongoStore, para que los tests verifiquen hashes
+    // reales y no una versión simplificada que siempre cuadra.
     async recordTransaction(data) {
-      transactions.push(data);
-      return data;
+      const entry = {
+        ...data,
+        index: head.index + 1,
+        prevHash: head.hash,
+        timestamp: data.timestamp || new Date(),
+      };
+      entry.hash = hashEntry(entry);
+
+      head = { index: entry.index, hash: entry.hash };
+      transactions.push(entry);
+      return entry;
+    },
+
+    async listLedger({ limit = 50, before } = {}) {
+      return transactions
+        .filter((t) => t.index && (!before || t.index < Number(before)))
+        .sort((a, b) => b.index - a.index)
+        .slice(0, limit);
+    },
+
+    async listLedgerInOrder() {
+      return transactions.filter((t) => t.index).sort((a, b) => a.index - b.index);
+    },
+
+    async getOrCreateSetting(key, makeValue) {
+      if (!settings.has(key)) settings.set(key, makeValue());
+      return settings.get(key);
     },
 
     async listTransactionsFor(phoneNumber, limit = 10) {
@@ -122,7 +152,7 @@ function createFakeStore({ treasurerPhone } = {}) {
       return user.pin;
     },
 
-    _debug: { users, transactions, content },
+    _debug: { users, transactions, content, settings },
   };
 }
 
