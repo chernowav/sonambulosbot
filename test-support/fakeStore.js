@@ -156,6 +156,9 @@ function createFakeStore({ treasurerPhone } = {}) {
       if (name) user.name = name;
       user.email = email;
       user.pin = pin;
+      // Igual que mongoStore: reclamar la cuenta también libera el bloqueo.
+      user.loginFails = 0;
+      delete user.lockedUntil;
       users.set(phoneNumber, user);
       return { ok: true, user };
     },

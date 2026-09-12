@@ -126,6 +126,12 @@ function createMongoStore({ treasurerPhone }) {
       existing.email = email;
       existing.pinHash = hashPin(phoneNumber, pin);
       existing.updatedAt = new Date();
+      // Quien reclama un registro fantasma suele llegar aquí después de
+      // intentar entrar varias veces con un PIN que nunca existió, y esos
+      // intentos ya lo dejaron bloqueado. Acaba de demostrar que la cuenta es
+      // suya al crearla: arrastrar el bloqueo solo lo dejaría afuera otra vez.
+      existing.loginFails = 0;
+      existing.lockedUntil = undefined;
       await existing.save();
       return { ok: true, user: await promoteIfTreasurer(existing) };
     }

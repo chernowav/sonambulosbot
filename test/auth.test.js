@@ -257,3 +257,32 @@ test('the console is locked until the PIN is verified', async () => {
     assert.equal(store._debug.users.get('3001234567').balance, 10);
   });
 });
+
+test('claiming a phone-only record clears a lockout caused by trying to log into it', async () => {
+  await withServer(async ({ post, store }) => {
+    // Registro fantasma: alguien le mandó monedas a este número antes de que
+    // existiera la cuenta, así que no tiene PIN.
+    const fantasma = { phoneNumber: '3153811758', name: 'Usuario 1758', balance: 35, isAdmin: true };
+    store._debug.users.set('3153811758', fantasma);
+
+    // Intenta entrar cinco veces; no hay PIN contra qué comparar, así que
+    // falla y se bloquea a sí mismo.
+    for (let i = 0; i < 5; i += 1) {
+      await post('/api/login', { phone: '3153811758', pin: '1111' });
+    }
+    assert.equal((await post('/api/login', { phone: '3153811758', pin: '1111' })).status, 429);
+
+    // Ahora crea la cuenta de verdad, que es lo que debía hacer.
+    const alta = await post('/api/signup', {
+      name: 'Cherno', phone: '3153811758', email: 'c@correo.com', pin: '2468',
+    });
+
+    assert.equal(alta.status, 200);
+    assert.equal(alta.body.user.balance, 35, 'debe conservar sus monedas');
+    assert.equal(alta.body.user.isAdmin, true, 'y sus permisos de tesorero');
+
+    // Y puede entrar de una, sin arrastrar el bloqueo anterior.
+    const entrada = await post('/api/login', { phone: '3153811758', pin: '2468' });
+    assert.equal(entrada.status, 200);
+  });
+});
