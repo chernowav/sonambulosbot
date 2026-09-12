@@ -6,6 +6,12 @@ const { GENESIS, hashEntry } = require('../services/ledger');
 // Si dos transferencias intentan colgarse del mismo eslabón, una reintenta.
 const LEDGER_RETRIES = 6;
 
+// Cuántos PIN errados seguidos se toleran antes de bloquear, y por cuánto.
+// Cinco minutos hacen inviable recorrer las 10 000 combinaciones, y son poco
+// tiempo para quien simplemente se equivocó en la fila del evento.
+const MAX_INTENTOS = 5;
+const BLOQUEO_MS = 5 * 60 * 1000;
+
 function isDuplicateKey(error) {
   return Boolean(error) && error.code === 11000;
 }
@@ -182,12 +188,45 @@ function createMongoStore({ treasurerPhone }) {
   // tesorero cuando alguien olvidó el suyo.
   async function resetPin(phoneNumber) {
     const pin = generatePin();
+    // Limpia también el bloqueo: si alguien quedó encerrado a fuerza de
+    // intentos, el PIN nuevo del tesorero es justamente cómo lo rescata.
     const user = await User.findOneAndUpdate(
       { phoneNumber },
-      { $set: { pinHash: hashPin(phoneNumber, pin) } },
+      { $set: { pinHash: hashPin(phoneNumber, pin), loginFails: 0 }, $unset: { lockedUntil: '' } },
       { new: true }
     );
     return user ? pin : null;
+  }
+
+  // Devuelve hasta cuándo está bloqueado, o null si puede intentar.
+  async function loginLockedUntil(phoneNumber) {
+    const user = await User.findOne({ phoneNumber }, { lockedUntil: 1 });
+    if (!user || !user.lockedUntil) return null;
+    return user.lockedUntil.getTime() > Date.now() ? user.lockedUntil.getTime() : null;
+  }
+
+  // Cuenta un intento fallido y bloquea al llegar al tope. Si el número no
+  // tiene cuenta no hace nada: quien prueba números al azar no debe poder
+  // distinguir "no existe" de "PIN errado" por el comportamiento.
+  async function registerFailedLogin(phoneNumber) {
+    const user = await User.findOneAndUpdate(
+      { phoneNumber },
+      { $inc: { loginFails: 1 } },
+      { new: true }
+    );
+
+    if (!user || user.loginFails < MAX_INTENTOS) return null;
+
+    const lockedUntil = new Date(Date.now() + BLOQUEO_MS);
+    await User.updateOne({ phoneNumber }, { $set: { lockedUntil, loginFails: 0 } });
+    return lockedUntil.getTime();
+  }
+
+  async function clearLoginFailures(phoneNumber) {
+    await User.updateOne(
+      { phoneNumber },
+      { $set: { loginFails: 0 }, $unset: { lockedUntil: '' } }
+    );
   }
 
   async function verifyPin(phoneNumber, pin) {
@@ -320,6 +359,9 @@ function createMongoStore({ treasurerPhone }) {
     unlinkTelegram,
     verifyPin,
     resetPin,
+    loginLockedUntil,
+    registerFailedLogin,
+    clearLoginFailures,
   };
 }
 

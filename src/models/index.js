@@ -19,6 +19,11 @@ const userSchema = new mongoose.Schema({
   // es de un solo uso: viaja en el enlace y se consume al enganchar.
   telegramChatId: String,
   telegramLinkCode: { type: String, index: true, sparse: true },
+
+  // Un PIN de 4 dígitos son 10 000 combinaciones: sin contar los intentos
+  // fallidos se prueban todas en minutos. Ver src/routes/auth.js.
+  loginFails: { type: Number, default: 0 },
+  lockedUntil: Date,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
@@ -103,6 +108,12 @@ const ledgerHeadSchema = new mongoose.Schema({
   index: { type: Number, default: 0 },
   hash: { type: String, default: 'GENESIS' },
 });
+
+// Las dos consultas que corren todo el tiempo durante el evento: los
+// movimientos de una persona (para avisarle) y el libro por orden.
+transactionSchema.index({ from: 1, index: 1 });
+transactionSchema.index({ to: 1, index: 1 });
+transactionSchema.index({ timestamp: -1 });
 
 module.exports = {
   User: mongoose.model('User', userSchema),

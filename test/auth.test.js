@@ -156,6 +156,73 @@ test('login accepts the phone written with a country code or spaces', async () =
   });
 });
 
+test('guessing PINs gets locked out before the whole range can be tried', async () => {
+  await withServer(async ({ post, store }) => {
+    await post('/api/signup', VALID);
+
+    // Cinco intentos errados seguidos.
+    for (let i = 0; i < 5; i += 1) {
+      const r = await post('/api/login', { phone: VALID.phone, pin: '0000' });
+      assert.equal(r.status, 401, `intento ${i + 1}`);
+    }
+
+    // El sexto ya no se evalúa: la cuenta queda cerrada un rato.
+    const bloqueado = await post('/api/login', { phone: VALID.phone, pin: '0001' });
+    assert.equal(bloqueado.status, 429);
+    assert.match(bloqueado.body.error, /Demasiados intentos/);
+
+    // Y ni siquiera el PIN correcto pasa mientras dure el bloqueo, que es
+    // justamente lo que hace inviable recorrer las combinaciones.
+    const correcto = await post('/api/login', { phone: VALID.phone, pin: VALID.pin });
+    assert.equal(correcto.status, 429);
+
+    assert.ok(store._debug.users.get('3001234567').lockedUntil > Date.now());
+  });
+});
+
+test('a wrong PIN followed by the right one does not lock anybody out', async () => {
+  await withServer(async ({ post }) => {
+    await post('/api/signup', VALID);
+
+    await post('/api/login', { phone: VALID.phone, pin: '0000' });
+    await post('/api/login', { phone: VALID.phone, pin: '0000' });
+
+    const bien = await post('/api/login', { phone: VALID.phone, pin: VALID.pin });
+    assert.equal(bien.status, 200);
+
+    // El contador volvió a cero: dos errores de ayer no suman a los de hoy.
+    for (let i = 0; i < 4; i += 1) {
+      const r = await post('/api/login', { phone: VALID.phone, pin: '0000' });
+      assert.equal(r.status, 401, `intento ${i + 1} debería seguir evaluándose`);
+    }
+  });
+});
+
+test('the treasurer new PIN also frees someone who got locked out', async () => {
+  await withServer(async ({ post, store }) => {
+    await post('/api/signup', VALID);
+    for (let i = 0; i < 5; i += 1) await post('/api/login', { phone: VALID.phone, pin: '0000' });
+
+    assert.equal((await post('/api/login', { phone: VALID.phone, pin: VALID.pin })).status, 429);
+
+    const nuevoPin = await store.resetPin('3001234567');
+
+    const r = await post('/api/login', { phone: VALID.phone, pin: nuevoPin });
+    assert.equal(r.status, 200);
+  });
+});
+
+test('failed attempts on a phone with no account reveal nothing', async () => {
+  await withServer(async ({ post }) => {
+    // Seis intentos sobre un número inexistente: la respuesta no cambia, así
+    // que nadie puede deducir qué números tienen cuenta por el bloqueo.
+    for (let i = 0; i < 6; i += 1) {
+      const r = await post('/api/login', { phone: '3001119999', pin: '0000' });
+      assert.equal(r.status, 401);
+    }
+  });
+});
+
 test('/api/me rejects a missing or forged token', async () => {
   await withServer(async ({ call }) => {
     assert.equal((await call('/api/me')).status, 401);

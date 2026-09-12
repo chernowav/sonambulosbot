@@ -1,6 +1,10 @@
 const { generatePin } = require('../src/utils/pin');
 const { GENESIS, hashEntry } = require('../src/services/ledger');
 
+// Mismos umbrales que src/store/mongoStore.js.
+const MAX_INTENTOS = 5;
+const BLOQUEO_MS = 5 * 60 * 1000;
+
 // Implementación en memoria de la misma interfaz que src/store/mongoStore.js,
 // para poder probar src/services/commands.js sin una base de datos real.
 function createFakeStore({ treasurerPhone } = {}) {
@@ -181,10 +185,39 @@ function createFakeStore({ treasurerPhone } = {}) {
       return Boolean(user && user.pin && pin && user.pin === pin);
     },
 
+    async loginLockedUntil(phoneNumber) {
+      const user = users.get(phoneNumber);
+      if (!user || !user.lockedUntil) return null;
+      return user.lockedUntil > Date.now() ? user.lockedUntil : null;
+    },
+
+    async registerFailedLogin(phoneNumber) {
+      const user = users.get(phoneNumber);
+      if (!user) return null;
+
+      user.loginFails = (user.loginFails || 0) + 1;
+      if (user.loginFails < MAX_INTENTOS) return null;
+
+      user.lockedUntil = Date.now() + BLOQUEO_MS;
+      user.loginFails = 0;
+      return user.lockedUntil;
+    },
+
+    async clearLoginFailures(phoneNumber) {
+      const user = users.get(phoneNumber);
+      if (!user) return;
+      user.loginFails = 0;
+      delete user.lockedUntil;
+    },
+
     async resetPin(phoneNumber) {
       const user = users.get(phoneNumber);
       if (!user) return null;
       user.pin = generatePin();
+      // Igual que mongoStore: el PIN nuevo también rescata a quien quedó
+      // bloqueado por intentos fallidos.
+      user.loginFails = 0;
+      delete user.lockedUntil;
       return user.pin;
     },
 

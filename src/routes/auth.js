@@ -44,11 +44,24 @@ function createAuthRouter({ store, sessions }) {
   router.post('/login', async (req, res) => {
     const phoneNumber = normalizePhone(req.body.phone);
 
+    // Sin esto, probar las 10 000 combinaciones de un PIN de 4 dígitos es
+    // cuestión de minutos y la cuenta de cualquiera queda abierta.
+    const bloqueado = await store.loginLockedUntil(phoneNumber);
+    if (bloqueado) {
+      const minutos = Math.max(1, Math.ceil((bloqueado - Date.now()) / 60000));
+      return res.status(429).json({
+        error: `Demasiados intentos fallidos. Vuelve a intentar en ${minutos} minuto${minutos === 1 ? '' : 's'}, o pídele al tesorero un PIN nuevo.`,
+      });
+    }
+
     // Un solo mensaje para "no existe" y "PIN incorrecto": si fueran
     // distintos, cualquiera podría averiguar qué números tienen cuenta.
     if (!(await store.verifyPin(phoneNumber, req.body.pin))) {
+      await store.registerFailedLogin(phoneNumber);
       return res.status(401).json({ error: 'Teléfono o PIN incorrecto.' });
     }
+
+    await store.clearLoginFailures(phoneNumber);
 
     const user = await store.getUser(phoneNumber);
     res.json({ token: sessions.issue(phoneNumber), user: publicUser(user) });
