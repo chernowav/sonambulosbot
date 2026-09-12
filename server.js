@@ -43,7 +43,7 @@ async function main() {
     console.warn('   Las transferencias funcionan, pero nadie recibe el aviso por mensaje.');
   }
 
-  const app = createApp({ config, store, sessions, commands, sendMessage });
+  const app = createApp({ config, store, sessions, commands, sendMessage, sms });
 
   app.listen(config.port, () => {
     console.log(`🚀 ${config.botName} corriendo en el puerto ${config.port}`);

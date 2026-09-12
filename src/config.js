@@ -14,6 +14,11 @@ const config = {
   mongodbUri: process.env.MONGODB_URI,
   adminPassword: readAdminPassword(),
 
+  // readAdminPassword() siempre devuelve algo (si falta, inventa una), así que
+  // preguntar por adminPassword no distingue "configurada" de "autogenerada y
+  // distinta en cada reinicio". Esto sí.
+  adminPasswordConfigurada: Boolean(process.env.ADMIN_PASSWORD),
+
   // Nulo a propósito: si no viene por variable de entorno, el servidor saca
   // uno guardado en la base (src/store getOrCreateSetting). Antes se generaba
   // en memoria en cada arranque, y por eso cada redespliegue cerraba la

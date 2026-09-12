@@ -10,7 +10,7 @@ const { createLedgerRouter } = require('./routes/ledger');
 // construirlo, para que test/ pueda levantar la misma app con un store en
 // memoria y hablarle por HTTP sin Mongo de por medio. server.js es el que
 // arma las dependencias reales.
-function createApp({ config, store, sessions, commands, sendMessage }) {
+function createApp({ config, store, sessions, commands, sendMessage, sms }) {
   const handleIncoming = createWebhookHandler({ commands, config, sendMessage, sessions });
 
   // Momento de arranque de esta instancia. Sirve para saber si el servidor se
@@ -51,8 +51,14 @@ function createApp({ config, store, sessions, commands, sendMessage }) {
     res.json({
       status: `✅ ${config.botName} Bot running`,
       email: 'sonambulosctg@gmail.com',
-      version: '1.2.1-beta',
+      version: '1.3.0-beta',
       startedAt,
+      // Para poder comprobar desde afuera si las credenciales quedaron bien
+      // puestas, sin tener que mandar un mensaje de verdad para averiguarlo.
+      sms: sms && sms.enabled ? 'configurado' : 'sin configurar',
+      claveTesorero: config.adminPasswordConfigurada
+        ? 'configurada'
+        : 'autogenerada (cambia en cada reinicio)',
       endpoints: {
         'GET /chat': 'Consola web (crear cuenta / iniciar sesión)',
         'GET /libro': 'Libro público de movimientos, sin cuenta',
